@@ -1,0 +1,320 @@
+project(shadow-plugin-bitcoin)
+
+## ensure cmake version
+cmake_minimum_required(VERSION 2.8.8 FATAL_ERROR)
+
+## ensure unix environment (CMAKE_SYSTEM_NAME == "Linux")
+if((NOT UNIX) OR (NOT ("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")))
+    message(FATAL_ERROR "Unix/Linux environment is required.")
+endif((NOT UNIX) OR (NOT ("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")))
+
+## ensure out-of-source build
+if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+    message(FATAL_ERROR "An out-of-source build is required. Please see the README.")
+endif("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_BINARY_DIR}")
+
+## make it easier for sub-projects to add CFLAGS
+macro(add_cflags)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ARGN}")
+endmacro(add_cflags)
+
+## now handle the options, set up our own flags
+set(CMAKE_C_FLAGS_DEBUG "")
+set(CMAKE_C_FLAGS_RELEASE "")
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
+    message(STATUS "Release enabled. Setting '-DNDEBUG' and '-O3'.")
+    add_definitions(-DNDEBUG)
+    add_cflags(-O3)
+else()
+    message(STATUS "Debug enabled. Setting '-DDEBUG' and '-g'.")
+    add_definitions(-DDEBUG)
+    add_cflags(-g)
+endif()
+
+## get general includes
+include(CheckIncludeFile)
+include(CheckFunctionExists)
+include(CheckLibraryExists)
+include(TestBigEndian)
+
+## general tests and configurations
+TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
+set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
+set(CMAKE_INCLUDE_DIRECTORIES_PROJECT_BEFORE ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+## we need to know where shadow is installed
+if("${SHADOW_ROOT}" STREQUAL "")
+    set(SHADOW_ROOT "$ENV{HOME}/.shadow")
+endif("${SHADOW_ROOT}" STREQUAL "")
+if(EXISTS "${SHADOW_ROOT}")
+    message(STATUS "SHADOW_ROOT = ${SHADOW_ROOT}")
+else()
+    message(FATAL_ERROR "SHADOW_ROOT path does not exist: '${SHADOW_ROOT}'")
+endif()
+
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${SHADOW_ROOT}")
+endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+if(EXISTS "${CMAKE_INSTALL_PREFIX}")
+    message(STATUS "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")
+else()
+    message(FATAL_ERROR "CMAKE_INSTALL_PREFIX path does not exist: '${CMAKE_INSTALL_PREFIX}'")
+endif()
+
+## we use cmake files from shadow
+set(CMAKE_MODULE_PATH "${SHADOW_ROOT}/share/cmake/Modules")
+if(EXISTS "${CMAKE_MODULE_PATH}")
+    message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
+else()
+    message(FATAL_ERROR "CMAKE_MODULE_PATH path does not exist: '${CMAKE_MODULE_PATH}'")
+endif()
+include_directories(${CMAKE_MODULE_PATH})
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
+
+## we need to use LLVM to build the plug-ins
+set(LLVMHoistGlobalsPATH "${SHADOW_ROOT}/lib/LLVMHoistGlobals.so")
+if(EXISTS "${LLVMHoistGlobalsPATH}")
+    message(STATUS "LLVMHoistGlobalsPATH = ${LLVMHoistGlobalsPATH}")
+else()
+    message(FATAL_ERROR "LLVMHoistGlobalsPATH path does not exist: '${LLVMHoistGlobalsPATH}'")
+endif()
+include(LLVMTools)
+add_custom_target(LLVMHoistGlobals)
+
+## the plug-ins need to include shd-library.h and cmake files from shadow
+include_directories(${SHADOW_ROOT}/include)
+
+## plug-ins need to disable fortification to ensure syscalls are intercepted
+#add_definitions(-D_GNU_SOURCE)
+add_cflags("-fno-inline -fno-strict-aliasing -U_FORTIFY_SOURCE")
+
+## CFLAGS status update
+message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
+
+#===================================================================
+
+#find_package(GLIB REQUIRED)
+#include_directories(${GLIB_INCLUDES})
+
+find_package(Threads REQUIRED)
+
+find_package(Boost 1.45.0 REQUIRED COMPONENTS system filesystem thread program_options)
+if(NOT Boost_FOUND)
+    message(FATAL_ERROR "Could not locate Boost.")
+endif()
+set(Boost_USE_STATIC_LIBS OFF) 
+set(Boost_USE_MULTITHREADED ON)  
+set(Boost_USE_STATIC_RUNTIME OFF)
+message (STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
+message (STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
+
+find_package(OpenSSL REQUIRED)
+if(OPENSSL_FOUND)
+    message (STATUS "OPENSSL_INCLUDES = ${OPENSSL_INCLUDES}")
+    message (STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
+else()
+    message(FATAL_ERROR "Could not locate OpenSSL.")
+endif()
+
+find_package(LIBDB REQUIRED)
+
+# i dont know why this is not included automatically
+include_directories(/usr/include/c++/4.8.2/ /usr/include/c++/4.8.2/x86_64-redhat-linux/)
+
+#get_filename_component(CURRENT_BITCOIN_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
+set(CURRENT_BITCOIN_DIR /home/rob/dev/bitcoin/src)
+include_directories(${CURRENT_BITCOIN_DIR})
+include_directories(${CURRENT_BITCOIN_DIR}/json)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/db)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/helpers)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/helpers/memenv)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/include)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/include/leveldb)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/port)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/table)
+include_directories(${CURRENT_BITCOIN_DIR}/leveldb/util)
+
+#include_directories(AFTER ${LIBDB_INCLUDES} ${BOOST_INCLUDES})
+
+set(BITCOIN_CORE_H
+  ${CURRENT_BITCOIN_DIR}/addrman.h
+  ${CURRENT_BITCOIN_DIR}/alert.h
+  ${CURRENT_BITCOIN_DIR}/allocators.h
+  ${CURRENT_BITCOIN_DIR}/base58.h
+  ${CURRENT_BITCOIN_DIR}/bloom.h
+  ${CURRENT_BITCOIN_DIR}/chainparams.h
+  ${CURRENT_BITCOIN_DIR}/checkpoints.h
+  ${CURRENT_BITCOIN_DIR}/checkqueue.h
+  ${CURRENT_BITCOIN_DIR}/clientversion.h
+  ${CURRENT_BITCOIN_DIR}/coincontrol.h
+  ${CURRENT_BITCOIN_DIR}/coins.h
+  ${CURRENT_BITCOIN_DIR}/compat.h
+  ${CURRENT_BITCOIN_DIR}/core.h
+  ${CURRENT_BITCOIN_DIR}/crypter.h
+  ${CURRENT_BITCOIN_DIR}/db.h
+  ${CURRENT_BITCOIN_DIR}/hash.h
+  ${CURRENT_BITCOIN_DIR}/init.h
+  ${CURRENT_BITCOIN_DIR}/key.h
+  ${CURRENT_BITCOIN_DIR}/keystore.h
+  ${CURRENT_BITCOIN_DIR}/leveldbwrapper.h
+  ${CURRENT_BITCOIN_DIR}/limitedmap.h
+  ${CURRENT_BITCOIN_DIR}/main.h
+  ${CURRENT_BITCOIN_DIR}/miner.h
+  ${CURRENT_BITCOIN_DIR}/mruset.h
+  ${CURRENT_BITCOIN_DIR}/netbase.h
+  ${CURRENT_BITCOIN_DIR}/net.h
+  ${CURRENT_BITCOIN_DIR}/noui.h
+  ${CURRENT_BITCOIN_DIR}/protocol.h
+  ${CURRENT_BITCOIN_DIR}/rpcclient.h
+  ${CURRENT_BITCOIN_DIR}/rpcprotocol.h
+  ${CURRENT_BITCOIN_DIR}/rpcserver.h
+  ${CURRENT_BITCOIN_DIR}/script.h
+  ${CURRENT_BITCOIN_DIR}/serialize.h
+  ${CURRENT_BITCOIN_DIR}/sync.h
+  ${CURRENT_BITCOIN_DIR}/threadsafety.h
+  ${CURRENT_BITCOIN_DIR}/tinyformat.h
+  ${CURRENT_BITCOIN_DIR}/txdb.h
+  ${CURRENT_BITCOIN_DIR}/txmempool.h
+  ${CURRENT_BITCOIN_DIR}/ui_interface.h
+  ${CURRENT_BITCOIN_DIR}/uint256.h
+  ${CURRENT_BITCOIN_DIR}/util.h
+  ${CURRENT_BITCOIN_DIR}/version.h
+  ${CURRENT_BITCOIN_DIR}/walletdb.h
+  ${CURRENT_BITCOIN_DIR}/wallet.h
+)
+
+set(JSON_H
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_error_position.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_reader.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_reader_template.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_stream_reader.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_utils.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_value.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_writer.h
+  ${CURRENT_BITCOIN_DIR}/json/json_spirit_writer_template.h
+)
+
+set(libbitcoin_server_a_SOURCES
+  ${CURRENT_BITCOIN_DIR}/addrman.cpp
+  ${CURRENT_BITCOIN_DIR}/alert.cpp
+  ${CURRENT_BITCOIN_DIR}/bloom.cpp
+  ${CURRENT_BITCOIN_DIR}/checkpoints.cpp
+  ${CURRENT_BITCOIN_DIR}/coins.cpp
+  ${CURRENT_BITCOIN_DIR}/init.cpp
+  ${CURRENT_BITCOIN_DIR}/keystore.cpp
+  ${CURRENT_BITCOIN_DIR}/leveldbwrapper.cpp
+  ${CURRENT_BITCOIN_DIR}/main.cpp
+  ${CURRENT_BITCOIN_DIR}/miner.cpp
+  ${CURRENT_BITCOIN_DIR}/net.cpp
+  ${CURRENT_BITCOIN_DIR}/noui.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcblockchain.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcmining.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcmisc.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcnet.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcrawtransaction.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcserver.cpp
+  ${CURRENT_BITCOIN_DIR}/txdb.cpp
+  ${CURRENT_BITCOIN_DIR}/txmempool.cpp
+  ${JSON_H}
+  ${BITCOIN_CORE_H}
+)
+
+set(libbitcoin_common_a_SOURCES
+  ${CURRENT_BITCOIN_DIR}/base58.cpp
+  ${CURRENT_BITCOIN_DIR}/allocators.cpp
+  ${CURRENT_BITCOIN_DIR}/chainparams.cpp
+  ${CURRENT_BITCOIN_DIR}/core.cpp
+  ${CURRENT_BITCOIN_DIR}/hash.cpp
+  ${CURRENT_BITCOIN_DIR}/key.cpp
+  ${CURRENT_BITCOIN_DIR}/netbase.cpp
+  ${CURRENT_BITCOIN_DIR}/protocol.cpp
+  ${CURRENT_BITCOIN_DIR}/rpcprotocol.cpp
+  ${CURRENT_BITCOIN_DIR}/script.cpp
+  ${CURRENT_BITCOIN_DIR}/sync.cpp
+  ${CURRENT_BITCOIN_DIR}/util.cpp
+  ${CURRENT_BITCOIN_DIR}/version.cpp
+  ${BITCOIN_CORE_H}
+)
+
+set(libbitcoin_cli_a_SOURCES
+  ${CURRENT_BITCOIN_DIR}/rpcclient.cpp
+  ${BITCOIN_CORE_H}
+)
+
+set(leveldb_SOURCES
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/builder.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/c.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/dbformat.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/db_impl.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/db_iter.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/filename.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/log_reader.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/log_writer.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/memtable.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/repair.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/table_cache.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/version_edit.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/version_set.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/db/write_batch.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/block_builder.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/block.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/filter_block.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/format.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/iterator.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/merger.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/table_builder.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/table.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/table/two_level_iterator.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/arena.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/bloom.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/cache.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/coding.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/comparator.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/crc32c.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/env.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/env_posix.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/env_win.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/filter_policy.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/hash.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/histogram.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/logging.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/options.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/util/status.cc
+  ${CURRENT_BITCOIN_DIR}/leveldb/port/port_posix.cc
+)
+
+set(memenv_SOURCES
+  ${CURRENT_BITCOIN_DIR}/leveldb/helpers/memenv/memenv.cc
+)
+
+add_bitcode(shadow-bitcoin-leveldb-bitcode leveldb_SOURCES)
+add_bitcode(shadow-bitcoin-memenv-bitcode memenv_SOURCES)
+
+add_bitcode(shadow-bitcoin-server-bitcode ${libbitcoin_server_a_SOURCES})
+add_bitcode(shadow-bitcoin-cli-bitcode ${libbitcoin_cli_a_SOURCES})
+add_bitcode(shadow-bitcoin-common-bitcode ${libbitcoin_common_a_SOURCES})
+
+add_bitcode(shadow-plugin-bitcoind-bitcode bitcoind.cpp shd-bitcoind-plugin.c)
+
+add_plugin(shadow-plugin-bitcoind
+  shadow-plugin-bitcoind-bitcode
+  shadow-bitcoin-server-bitcode
+  shadow-bitcoin-cli-bitcode
+  shadow-bitcoin-common-bitcode
+  shadow-bitcoin-leveldb-bitcode
+  shadow-bitcoin-memenv-bitcode)
+#target_link_libraries(shadow-plugin-bitcoind ${LIBDB_LIBRARIES} ${BOOST_LIBRARIES})
+#install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
+
+
+#add_bitcode(shadow-bitcoin-bitcoincli-bitcode ${CURRENT_BITCOIN_DIR}/bitcoin-cli.cpp)#shd-bitcoincli-plugin.c
+#add_plugin(shadow-plugin-bitcoincli
+#  shadow-bitcoin-bitcoincli-bitcode
+#  shadow-bitcoin-cli-bitcode
+#  shadow-bitcoin-common-bitcode)
+#target_link_libraries(shadow-plugin-bitcoin-cli ${BOOST_LIBRARIES})
+#install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
+
