@@ -93,7 +93,7 @@ add_cflags("-fno-inline -fno-strict-aliasing -U_FORTIFY_SOURCE")
 message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
 
 #get_filename_component(CURRENT_BITCOIN_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
-set(CURRENT_BITCOIN_DIR /home/rob/dev/bitcoin)
+set(CURRENT_BITCOIN_DIR ${CMAKE_BINARY_DIR}/bitcoin)
 
 #===================================================================
 # Check Bitcoin Dependencies

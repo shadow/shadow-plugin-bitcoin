@@ -1,10 +1,10 @@
-# shadow-plugins-extra
+# shadow-plugin-bitcoin
 
 Shadow plugin for bitcoind (the Satoshi reference client)
 
-This repository holds a bitcoin plug-in for Shadow. It can be used to run a private bitcoin network on a single machine using the Shadow discrete-event network simulator. For more information about Shadow, see https://shadow.github.io and https://github.com/shadow.
+This repository holds a Shadow plug-in that runs bitcoind. It can be used to run a private bitcoin network on a single machine using the Shadow discrete-event network simulator. For more information about Shadow, see https://shadow.github.io and https://github.com/shadow.
 
-# dependencies
+## dependencies
 
 Fedora:
 
@@ -12,17 +12,23 @@ Fedora:
 sudo yum install libstdc++ libstdc++-devel boost boost-devel libdb4 libdb4-devel libdb4-cxx libdb4-cxx-devel
 ```
 
-# build
+## setup plugin
 
-```
-PKG_CONFIG_PATH=/home/rob/.shadow/lib/pkgconfig LDFLAGS=-L/home/rob/.shadow/lib CFLAGS=-I/home/rob/.shadow/include ./configure --prefix=/home/rob/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
-```
-
-## quick setup
+### get and configure bitcoin
 
 ```bash
+cd shadow-plugin-bitcoin
 mkdir build
 cd build
+git clone https://github.com/bitcoin/bitcoin.git
+cd bitcoin
+PKG_CONFIG_PATH=`readlink -f ~`/.shadow/lib/pkgconfig LDFLAGS=-L`readlink -f ~`/.shadow/lib CFLAGS=-I`readlink -f ~`/.shadow/include ./configure --prefix=`readlink -f ~`/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
+cd ..
+```
+
+### build plugin using cmake
+
+```bash
 CC=`which clang` CXX=`which clang++` cmake .. -DCMAKE_INSTALL_PREFIX=`readlink -f ~`/.shadow
 make -jN
 make install
@@ -65,7 +71,7 @@ VERBOSE=1 CC=`which clang` CXX=`which clang++` cmake ..
 make
 ```
 
-# contributing
+## contributing
 
 Please feel free to submit pull requests to contribute.
 
