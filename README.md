@@ -22,6 +22,7 @@ mkdir build
 cd build
 git clone https://github.com/bitcoin/bitcoin.git
 cd bitcoin
+./autogen.sh
 PKG_CONFIG_PATH=`readlink -f ~`/.shadow/lib/pkgconfig LDFLAGS=-L`readlink -f ~`/.shadow/lib CFLAGS=-I`readlink -f ~`/.shadow/include ./configure --prefix=`readlink -f ~`/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
 cd ..
 ```
