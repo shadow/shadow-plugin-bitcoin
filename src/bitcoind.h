@@ -2,8 +2,8 @@
  * See LICENSE for licensing information
  */
 
-#ifndef HELLO_H_
-#define HELLO_H_
+#ifndef BITCOIND_H_
+#define BITCOIND_H_
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,12 +18,12 @@
 
 #include <shd-library.h>
 
-typedef struct _Hello Hello;
+typedef struct _BitcoinD BitcoinD;
 
-Hello* hello_new(int argc, char* argv[], ShadowLogFunc slogf);
-void hello_free(Hello* h);
-void hello_ready(Hello* h);
-int hello_getEpollDescriptor(Hello* h);
-int hello_isDone(Hello* h);
+BitcoinD* bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf);
+void bitcoind_free(BitcoinD* h);
+void bitcoind_ready(BitcoinD* h);
+int bitcoind_getEpollDescriptor(BitcoinD);
+int bitcoind_isDone(BitcoinD* h);
 
-#endif /* HELLO_H_ */
+#endif /* BITCOIND_H_ */

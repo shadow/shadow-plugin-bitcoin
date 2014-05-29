@@ -2,18 +2,18 @@
  * See LICENSE for licensing information
  */
 
-#include "hello.h"
+#include "bitcoind.h"
 
 /* functions that interface into shadow */
 ShadowFunctionTable shadowlib;
 
 /* our opaque instance of the hello node */
-Hello* helloNodeInstance = NULL;
+BitcoinD* bcdNodeInstance = NULL;
 
 /* shadow is creating a new instance of this plug-in as a node in
  * the simulation. argc and argv are as configured via the XML.
  */
-static void helloplugin_new(int argc, char* argv[]) {
+static void bitcoindplugin_new(int argc, char* argv[]) {
 	/* shadow wants to create a new node. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 * also pass along the interface shadow gave us earlier.
@@ -22,25 +22,25 @@ static void helloplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
-	helloNodeInstance = hello_new(argc, argv, shadowlib.log);
+	bcdNodeInstance = bitcoind_new(argc, argv, shadowlib.log);
 }
 
 /* shadow is freeing an existing instance of this plug-in that we previously
  * created in helloplugin_new()
  */
-static void helloplugin_free() {
+static void bitcoindplugin_free() {
 	/* shadow wants to free a node. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
-	hello_free(helloNodeInstance);
+	bitcoind_free(bcdNodeInstance);
 }
 
 /* shadow is notifying us that some descriptors are ready to read/write */
-static void helloplugin_ready() {
+static void bitcoindplugin_ready() {
 	/* shadow wants to handle some descriptor I/O. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
-	hello_ready(helloNodeInstance);
+	bitcoind_ready(bcdNodeInstance);
 }
 
 /* plug-in initialization. this only happens once per plug-in,
@@ -61,14 +61,14 @@ void __shadow_plugin_init__(ShadowFunctionTable* shadowlibFuncs) {
 	 * tell shadow how to call us back when creating/freeing nodes, and
 	 * where to call to notify us when there is descriptor I/O
 	 */
-	int success = shadowlib.registerPlugin(&helloplugin_new, &helloplugin_free, &helloplugin_ready);
+	int success = shadowlib.registerPlugin(&bitcoindplugin_new, &bitcoindplugin_free, &bitcoindplugin_ready);
 
 	/* we log through Shadow by using the log function it supplied to us */
 	if(success) {
 		shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__,
-				"successfully registered hello plug-in state");
+				"successfully registered bitcoind plug-in state");
 	} else {
 		shadowlib.log(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
-				"error registering hello plug-in state");
+				"error registering bitcoind plug-in state");
 	}
 }

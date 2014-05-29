@@ -9,7 +9,7 @@ This repository holds a bitcoin plug-in for Shadow. It can be used to run a priv
 Fedora:
 
 ```
-sudo yum install libstdc++ libstdc++-devel boost boost-devel libdb4 libdb4-devel
+sudo yum install libstdc++ libstdc++-devel boost boost-devel libdb4 libdb4-devel libdb4-cxx libdb4-cxx-devel
 ```
 
 # build

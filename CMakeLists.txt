@@ -93,7 +93,7 @@ add_cflags("-fno-inline -fno-strict-aliasing -U_FORTIFY_SOURCE")
 message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
 
 #get_filename_component(CURRENT_BITCOIN_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
-set(CURRENT_BITCOIN_DIR /home/rob/dev/bitcoin/src)
+set(CURRENT_BITCOIN_DIR /home/rob/dev/bitcoin)
 
 #===================================================================
 # Check Bitcoin Dependencies
@@ -108,10 +108,11 @@ find_package(Boost 1.45.0 REQUIRED COMPONENTS system filesystem thread program_o
 if(NOT Boost_FOUND)
     message(FATAL_ERROR "Could not locate Boost.")
 endif()
+set(Boost_INCLUDES ${Boost_INCLUDE_DIRS})
 set(Boost_USE_STATIC_LIBS OFF) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF)
-message (STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
+message (STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDES}")
 message (STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 
 find_package(OpenSSL REQUIRED)
@@ -128,105 +129,46 @@ find_package(LIBDB REQUIRED)
 # package files
 #===================================================================
 
-set(LIB_HEADERS
-    addrman.h
-    alert.h
-    allocators.h
-    base58.h
-    bignum.h
-    coins.h
-    bloom.h
-    chainparams.h
-    checkpoints.h
-    checkqueue.h
-    clientversion.h
-    coincontrol.h
-    compat.h
-    core.h
-    crypter.h
-    db.h
-    hash.h
-    init.h
-    key.h
-    keystore.h
-    leveldbwrapper.h
-    limitedmap.h
-    main.h
-    miner.h
-    mruset.h
-    netbase.h
-    net.h
-    protocol.h
-    rpcclient.h
-    rpcprotocol.h
-    rpcserver.h
-    script.h
-    serialize.h
-    sync.h
-    threadsafety.h
-    tinyformat.h
-    txdb.h
-    txmempool.h
-    ui_interface.h
-    uint256.h
-    util.h
-    version.h
-    walletdb.h
-    wallet.h
-    )
+# bitcoin first
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src bitcoin_sources)
+list(REMOVE_ITEM bitcoin_sources
+    ${CURRENT_BITCOIN_DIR}/src/base58.cpp
+    ${CURRENT_BITCOIN_DIR}/src/bitcoin-cli.cpp
+    ${CURRENT_BITCOIN_DIR}/src/bitcoind.cpp
+)
 
-set(LIB_SOURCES
-    addrman.cpp
-    alert.cpp
-    allocators.cpp
-    bloom.cpp
-    chainparams.cpp
-    checkpoints.cpp
-    coins.cpp
-    core.cpp
-    crypter.cpp
-    db.cpp
-    hash.cpp
-    init.cpp
-    key.cpp
-    keystore.cpp
-    leveldbwrapper.cpp
-    main.cpp
-    miner.cpp
-    netbase.cpp
-    net.cpp
-    noui.cpp
-    protocol.cpp
-    rpcblockchain.cpp
-    rpcclient.cpp
-    rpcdump.cpp
-    rpcmining.cpp
-    rpcmisc.cpp
-    rpcnet.cpp
-    rpcprotocol.cpp
-    rpcrawtransaction.cpp
-    rpcserver.cpp
-    rpcwallet.cpp
-    script.cpp
-    sync.cpp
-    txdb.cpp
-    txmempool.cpp
-    util.cpp
-    version.cpp
-    wallet.cpp
-    walletdb.cpp
-    )
+FILE(GLOB bitcoin_headers ${CURRENT_BITCOIN_DIR}/src/*.h)
 
-set(BITCOIN_SOURCES)
-foreach(file ${LIB_SOURCES})
-    set(BITCOIN_SOURCES ${BITCOIN_SOURCES} ${CURRENT_BITCOIN_DIR}/${file})
+# now leveldb
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src/leveldb/db leveldb_db_sources)
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src/leveldb/util leveldb_util_sources)
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src/leveldb/table leveldb_table_sources)
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src/leveldb/port leveldb_port_sources)
+aux_source_directory(${CURRENT_BITCOIN_DIR}/src/leveldb/helpers/memenv leveldb_memenv_sources)
+set(leveldb_all_sources
+    ${leveldb_db_sources}
+    ${leveldb_util_sources}
+    ${leveldb_table_sources}
+    ${leveldb_port_sources}
+    ${leveldb_memenv_sources}
+)
+
+# do not include test files
+set(leveldb_sources)
+foreach(file ${leveldb_all_sources})
+    if(NOT ${file} MATCHES "(.*)_test.c(.*)")
+        set(leveldb_sources ${leveldb_sources} ${file})
+        #message(STATUS "source ${file}")
+    endif()
 endforeach()
 
-set(BITCOIN_HEADERS)
-foreach(file ${LIB_HEADERS})
-    set(BITCOIN_HEADERS ${BITCOIN_HEADERS} ${CURRENT_BITCOIN_DIR}/${file})
-endforeach()
-
+list(REMOVE_ITEM leveldb_sources
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/db/db_bench.cc
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/db/leveldb_main.cc
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/port/port_win.cc
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/util/testharness.cc
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/util/testutil.cc
+)
 #===================================================================
 # tweaks
 #===================================================================
@@ -234,9 +176,12 @@ endforeach()
 add_definitions( "-DHAS_BOOST -DHAVE_WORKING_BOOST_SLEEP" )
 
 # Generate bitcoin-config.h substituting config vars for include:
-configure_file(${CONTRIB_CURRENT_SOURCE_DIR}/bitcoin-config.h.cmake
-               ${CMAKE_CURRENT_BINARY_DIR}/bitcoin-config.h @ONLY)
+#configure_file(${CONTRIB_CURRENT_SOURCE_DIR}/bitcoin-config.h.cmake
+#               ${CMAKE_CURRENT_BINARY_DIR}/bitcoin-config.h @ONLY)
 add_definitions( "-DHAVE_CONFIG_H" )
+
+# needed so we include the correct port header for posix
+add_definitions( "-DLEVELDB_PLATFORM_POSIX" )
 
 #===================================================================
 # includes
@@ -245,29 +190,39 @@ add_definitions( "-DHAVE_CONFIG_H" )
 # i dont know why this is not included automatically
 #include_directories(/usr/include/c++/4.8.2/ /usr/include/c++/4.8.2/x86_64-redhat-linux/)
 
-include_directories(${CURRENT_BITCOIN_DIR} # for bitcoin-config.h
-                    ${LIBDB_INCLUDES}
-                    ${Boost_INCLUDE_DIRS}
-                    ${OPENSSL_INCLUDES}
-                    ${CURRENT_BITCOIN_DIR}/leveldb/include
-                    ${CURRENT_BITCOIN_DIR}/leveldb/helpers
-                    ${CURRENT_BITCOIN_DIR}/leveldb/helpers/memenv
-                    )
-
-#include_directories(AFTER ${LIBDB_INCLUDES} ${BOOST_INCLUDES})
+include_directories(${CMAKE_SOURCE_DIR}/src/)
+include_directories(${CURRENT_BITCOIN_DIR}/src
+    ${CURRENT_BITCOIN_DIR}/src/leveldb
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/include
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/helpers
+    ${CURRENT_BITCOIN_DIR}/src/leveldb/helpers/memenv
+)
+include_directories(AFTER ${LIBDB_INCLUDES} ${Boost_INCLUDES} ${OPENSSL_INCLUDES})
 
 #===================================================================
 # start building bitcode and plugins!
 #===================================================================
 
-add_bitcode(shadow-bitcoin-bitcode ${BITCOIN_HEADERS} ${BITCOIN_SOURCES})
-add_bitcode(shadow-leveldb-bitcode ${LEVELDB_HEADERS} ${LEVELDB_SOURCES})
+add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
+add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 
-add_bitcode(shadow-plugin-bitcoind-bitcode ${CURRENT_BITCOIN_DIR}/bitcoind.cpp src/bitcoind-plugin.c)
-add_plugin(shadow-plugin-bitcoind shadow-plugin-bitcoind-bitcode shadow-bitcoin-bitcode shadow-leveldb-bitcode)
-target_link_libraries(shadow-plugin-bitcoind ${CMAKE_THREAD_LIBS_INIT} ${LIBDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
+add_bitcode(shadow-plugin-bitcoind-bitcode 
+    ${CURRENT_BITCOIN_DIR}/src/bitcoind.cpp 
+    src/bitcoind-plugin.c
+)
+add_plugin(shadow-plugin-bitcoind 
+    shadow-plugin-bitcoind-bitcode
+    shadow-bitcoin-bitcode
+    shadow-leveldb-bitcode
+)
+target_link_libraries(shadow-plugin-bitcoind 
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${LIBDB_LIBRARIES}
+    ${Boost_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
+)
 
-#add_bitcode(shadow-plugin-bitcoincli-bitcode ${CURRENT_BITCOIN_DIR}/bitcoin-cli.cpp src/bitcoincli-plugin.c)
+#add_bitcode(shadow-plugin-bitcoincli-bitcode ${CURRENT_BITCOIN_DIR}/src/bitcoin-cli.cpp src/bitcoincli-plugin.c)
 #add_plugin(shadow-plugin-bitcoincli shadow-plugin-bitcoincli-bitcode shadow-bitcoin-bitcode shadow-leveldb-bitcode)
 #target_link_libraries(shadow-plugin-bitcoind ${CMAKE_THREAD_LIBS_INIT} ${LIBDB_LIBRARIES} ${Boost_LIBRARIES} ${OPENSSL_LIBRARIES})
 
