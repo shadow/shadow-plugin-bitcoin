@@ -87,7 +87,7 @@ include_directories(${SHADOW_ROOT}/include)
 
 ## plug-ins need to disable fortification to ensure syscalls are intercepted
 #add_definitions(-D_GNU_SOURCE)
-add_cflags("-fno-inline -fno-strict-aliasing -U_FORTIFY_SOURCE")
+add_cflags("-fno-inline -fno-strict-aliasing")
 
 ## CFLAGS status update
 message(STATUS "CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")

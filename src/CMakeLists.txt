@@ -12,27 +12,34 @@ set(BITCOIN_ROOT_DIR ${CMAKE_BINARY_DIR}/bitcoin)
 #find_package(GLIB REQUIRED)
 #include_directories(${GLIB_INCLUDES})
 
+# threads - set options BEFORE find_package()
+set(CMAKE_THREAD_PREFER_PTHREAD ON)  
 find_package(Threads REQUIRED)
+if(NOT Threads_FOUND)
+    message(FATAL_ERROR "Could not locate Threads.")
+endif()
+message(STATUS "CMAKE_USE_PTHREADS_INIT = ${CMAKE_USE_PTHREADS_INIT}")
+message(STATUS "CMAKE_THREAD_LIBS_INIT = ${CMAKE_THREAD_LIBS_INIT}")
 
-# set boost options BEFORE find_package()
+# boost - set options BEFORE find_package()
 set(Boost_USE_STATIC_LIBS OFF) 
-set(Boost_USE_MULTITHREADED OFF)  
+set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.45.0 REQUIRED COMPONENTS system filesystem thread program_options)
 if(NOT Boost_FOUND)
     message(FATAL_ERROR "Could not locate Boost.")
 endif()
-set(Boost_INCLUDES ${Boost_INCLUDE_DIRS})
-message (STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDES}")
-message (STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
+message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 
+# openssl
 find_package(OpenSSL REQUIRED)
-if(OPENSSL_FOUND)
-    message (STATUS "OPENSSL_INCLUDES = ${OPENSSL_INCLUDES}")
-    message (STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
-else()
+if(NOT OPENSSL_FOUND)
     message(FATAL_ERROR "Could not locate OpenSSL.")
 endif()
+message(STATUS "OPENSSL_VERSION = ${OPENSSL_VERSION}")
+message(STATUS "OPENSSL_INCLUDE_DIR = ${OPENSSL_INCLUDE_DIR}")
+message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
 
 #===================================================================
 # package files
@@ -141,7 +148,7 @@ include_directories(${BITCOIN_ROOT_DIR}/src
     ${BITCOIN_ROOT_DIR}/src/leveldb/helpers
     ${BITCOIN_ROOT_DIR}/src/leveldb/helpers/memenv
 )
-include_directories(AFTER ${Boost_INCLUDES} ${OPENSSL_INCLUDES})
+include_directories(AFTER ${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
 
 #===================================================================
 # build bitcode and plugins!
@@ -179,7 +186,7 @@ add_plugin(shadow-plugin-bitcoincli
     shadow-bitcoin-bitcode
     shadow-leveldb-bitcode
 )
-target_link_libraries(shadow-plugin-bitcoind 
+target_link_libraries(shadow-plugin-bitcoincli 
     ${CMAKE_THREAD_LIBS_INIT}
     ${Boost_LIBRARIES}
     ${OPENSSL_LIBRARIES}

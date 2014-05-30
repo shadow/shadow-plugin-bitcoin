@@ -72,8 +72,8 @@ cd build
 using `VERBOSE=1` for more verbose output
 
 ```bash
-VERBOSE=1 CC=`which clang` CXX=`which clang++` cmake ..
-make
+CC=`which clang` CXX=`which clang++` cmake ..
+VERBOSE=1 make
 ```
 
 ## contributing
