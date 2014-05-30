@@ -9,12 +9,14 @@ This repository holds a Shadow plug-in that runs bitcoind. It can be used to run
 Fedora:
 
 ```
-sudo yum install libstdc++ libstdc++-devel boost boost-devel libdb4 libdb4-devel libdb4-cxx libdb4-cxx-devel
+sudo yum install libstdc++ libstdc++-devel boost-static boost-devel
 ```
 
 ## setup plugin
 
 ### get and configure bitcoin
+
+We need to get the bitcoin source so we can compile it into our Shadow plug-in, and then configure it to obtain a proper `bitcoin-config.h` file.
 
 ```bash
 cd shadow-plugin-bitcoin
@@ -26,6 +28,8 @@ cd bitcoin
 PKG_CONFIG_PATH=`readlink -f ~`/.shadow/lib/pkgconfig LDFLAGS=-L`readlink -f ~`/.shadow/lib CFLAGS=-I`readlink -f ~`/.shadow/include ./configure --prefix=`readlink -f ~`/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
 cd ..
 ```
+
+Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify a custom install path of a custom compiled OpenSSL.
 
 ### build plugin using cmake
 

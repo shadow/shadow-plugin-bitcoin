@@ -1,6 +1,5 @@
 <shadow>
     <!-- our network -->
-
     <topology>
     <![CDATA[<?xml version="1.0" encoding="utf-8"?><graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
       <key attr.name="packetloss" attr.type="double" for="edge" id="d9" />
@@ -33,16 +32,17 @@
     </topology>
 
     <!-- the plug-ins we will be using -->
-
-	<plugin id="bitcoind" path="/home/rob/dev/shadow-plugin-bitcoin/build/libshadow-plugin-bitcoind.so" />
+	<plugin id="bitcoind" path="libshadow-plugin-bitcoind.so" />
+	<plugin id="bitcoincli" path="libshadow-plugin-bitcoincli.so" />
 
     <!-- the length of our experiment in seconds -->
-
     <kill time="1800" />
 
-    <!-- our services -->
-
-	<node id="bitcoinnode">
+    <!-- our nodes -->
+	<node id="bcdnode">
 	    <application plugin="bitcoind" time="13" arguments="NULL" />
+    </node>
+    <node id="bccnode">
+        <application plugin="bitcoincli" time="13" arguments="NULL" />
     </node>
 </shadow>

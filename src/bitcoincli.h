@@ -2,8 +2,8 @@
  * See LICENSE for licensing information
  */
 
-#ifndef BITCOIND_H_
-#define BITCOIND_H_
+#ifndef BITCOINCLI_H_
+#define BITCOINCLI_H_
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,10 +18,10 @@
 
 #include <shd-library.h>
 
-typedef struct _BitcoinD BitcoinD;
+typedef struct _BitcoinCLI BitcoinCLI;
 
-BitcoinD* bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf);
-void bitcoind_free(BitcoinD* h);
-void bitcoind_ready(BitcoinD* h);
+BitcoinCLI* bitcoincli_new(int argc, char* argv[], ShadowLogFunc slogf);
+void bitcoincli_free(BitcoinCLI* h);
+void bitcoincli_ready(BitcoinCLI* h);
 
-#endif /* BITCOIND_H_ */
+#endif /* BITCOINCLI_H_ */
