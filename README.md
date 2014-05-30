@@ -9,7 +9,7 @@ This repository holds a Shadow plug-in that runs bitcoind. It can be used to run
 Fedora:
 
 ```
-sudo yum install libstdc++ libstdc++-devel boost-static boost-devel
+sudo yum install libstdc++ libstdc++-devel boost boost-devel
 ```
 
 ## setup plugin
