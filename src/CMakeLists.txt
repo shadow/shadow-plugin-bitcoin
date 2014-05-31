@@ -160,8 +160,8 @@ add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 # bitcoind plugin
 add_bitcode(shadow-plugin-bitcoind-bitcode 
     ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
-    bitcoind-plugin.c
-    bitcoind.c
+    bitcoind/bitcoind-plugin.c
+    bitcoind/bitcoind.c
 )
 add_plugin(shadow-plugin-bitcoind 
     shadow-plugin-bitcoind-bitcode
@@ -178,8 +178,8 @@ install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 # bitcoincli plugin
 add_bitcode(shadow-plugin-bitcoincli-bitcode 
     ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
-    bitcoincli-plugin.c
-    bitcoincli.c
+    bitcoincli/bitcoincli-plugin.c
+    bitcoincli/bitcoincli.c
 )
 add_plugin(shadow-plugin-bitcoincli 
     shadow-plugin-bitcoincli-bitcode

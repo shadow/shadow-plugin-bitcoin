@@ -34,7 +34,7 @@ Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify a
 ### build plugin using cmake
 
 ```bash
-CC=`which clang` CXX=`which clang++` cmake .. -DCMAKE_INSTALL_PREFIX=`readlink -f ~`/.shadow
+CC=`which clang` CXX=`which clang++` cmake ..
 make -jN
 make install
 ```
@@ -46,17 +46,21 @@ Replace `N` with the number of cores you want to use for a parallel build.
 The `cmake` command above takes multiple options, specified as
 
 ```bash
-CC=`which clang` CXX=`which clang++` cmake .. -DOPT=VAL
+cmake .. -DOPT=VAL
 ```
 
 + SHADOW_ROOT = "path/to/shadow/install/root" (default is "~/.shadow")  
+  Specifies a custom path to the shadow installation root  
 + CMAKE_BUILD_TYPE = "Debug" or "Release" (default is "Debug")  
 + CMAKE_INSTALL_PREFIX = "path/to/install/root" (default is ${SHADOW_ROOT})  
+  Specifies a custom path to install this package  
++ CMAKE_PREFIX_PATH = "custom/search/path" (default is ${SHADOW_ROOT})  
+  Specifies a custom path to search for library dependencies  
 
-For example:
+For example, the following will fully specify the default options:
 
 ```bash
-CC=`which clang` CXX=`which clang++` cmake .. -DSHADOW_ROOT=/home/rob/.shadow -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/home/rob/.shadow
+CC=`which clang` CXX=`which clang++` cmake .. -DSHADOW_ROOT=/home/rob/.shadow -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/home/rob/.shadow -DCMAKE_PREFIX_PATH=/home/rob/.shadow
 ```
 
 ## troubleshooting
