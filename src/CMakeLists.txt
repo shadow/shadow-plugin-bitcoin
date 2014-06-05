@@ -242,6 +242,6 @@ install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
 
 
 ## preload library for intercepting functions
-add_library(shadow-preload-bitcoin SHARED bitcoind/bitcoind-preload.c)
-target_link_libraries(shadow-preload-bitcoin ${GLIB_LIBRARIES} ${DL_LIBRARIES})
-install(TARGETS shadow-preload-bitcoin DESTINATION lib)
+add_library(shadow-preload-bitcoind SHARED bitcoind/bitcoind-preload.c)
+target_link_libraries(shadow-preload-bitcoind ${GLIB_LIBRARIES} ${DL_LIBRARIES})
+install(TARGETS shadow-preload-bitcoind DESTINATION lib)
