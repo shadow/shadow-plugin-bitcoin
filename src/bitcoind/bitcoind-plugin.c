@@ -3,6 +3,7 @@
  */
 
 #include "bitcoind.h"
+#include <pth.h>
 
 /* functions that interface into shadow */
 ShadowFunctionTable shadowlib;
@@ -22,6 +23,7 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
+	pth_init();
 	bcdNodeInstance = bitcoind_new(argc, argv, shadowlib.log);
 }
 

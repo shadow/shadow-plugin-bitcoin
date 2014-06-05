@@ -20,6 +20,8 @@ BitcoinD* bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf) {
 	/* get memory for the new state */
 	BitcoinD* bcd = calloc(1, sizeof(BitcoinD));
 	assert(bcd);
+	bcd->slogf = slogf;
+	bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "bitcoin_new!!");
 	return bcd;
 }
 

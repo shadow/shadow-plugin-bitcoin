@@ -9,8 +9,8 @@ set(BITCOIN_ROOT_DIR ${CMAKE_BINARY_DIR}/bitcoin)
 # Check Bitcoin Dependencies
 #===================================================================
 
-#find_package(GLIB REQUIRED)
-#include_directories(${GLIB_INCLUDES})
+find_package(GLIB REQUIRED)
+include_directories(${GLIB_INCLUDES})
 
 # threads - set options BEFORE find_package()
 set(CMAKE_THREAD_PREFER_PTHREAD ON)  
@@ -123,6 +123,53 @@ list(REMOVE_ITEM leveldb_sources
     ${BITCOIN_ROOT_DIR}/src/leveldb/util/testharness.cc
     ${BITCOIN_ROOT_DIR}/src/leveldb/util/testutil.cc
 )
+
+#=============
+# Pth building
+#=============
+
+set(PTH_ROOT_DIR ${CMAKE_BINARY_DIR}/gnu-pth)
+include_directories(${PTH_ROOT_DIR})
+
+set(PTH_SOURCES
+   ${PTH_ROOT_DIR}/pth_compat.c
+   ${PTH_ROOT_DIR}/pth_debug.c
+   ${PTH_ROOT_DIR}/pth_syscall.c
+   ${PTH_ROOT_DIR}/pth_errno.c
+   ${PTH_ROOT_DIR}/pth_ring.c
+   ${PTH_ROOT_DIR}/pth_mctx.c
+   ${PTH_ROOT_DIR}/pth_uctx.c
+   ${PTH_ROOT_DIR}/pth_clean.c
+   ${PTH_ROOT_DIR}/pth_time.c
+   ${PTH_ROOT_DIR}/pth_tcb.c
+   ${PTH_ROOT_DIR}/pth_util.c
+   ${PTH_ROOT_DIR}/pth_pqueue.c
+   ${PTH_ROOT_DIR}/pth_event.c
+   ${PTH_ROOT_DIR}/pth_sched.c
+   ${PTH_ROOT_DIR}/pth_data.c
+   ${PTH_ROOT_DIR}/pth_msg.c
+   ${PTH_ROOT_DIR}/pth_cancel.c
+   ${PTH_ROOT_DIR}/pth_sync.c
+   ${PTH_ROOT_DIR}/pth_attr.c
+   ${PTH_ROOT_DIR}/pth_lib.c
+   ${PTH_ROOT_DIR}/pth_fork.c
+   ${PTH_ROOT_DIR}/pth_high.c
+   ${PTH_ROOT_DIR}/pth_ext.c
+   ${PTH_ROOT_DIR}/pth_string.c
+#   ${PTH_ROOT_DIR}/pthread.c
+)
+
+ADD_CUSTOM_COMMAND (
+   OUTPUT ${PTH_ROOT_DIR}/pth_p.h
+   COMMAND ${PTH_ROOT_DIR}/shtool 
+   ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+)
+
+set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
+
+
+
 #===================================================================
 # tweaks
 #===================================================================
@@ -192,3 +239,9 @@ target_link_libraries(shadow-plugin-bitcoincli
     ${OPENSSL_LIBRARIES}
 )
 install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
+
+
+## preload library for intercepting functions
+add_library(shadow-preload-bitcoin SHARED bitcoind/bitcoind-preload.c)
+target_link_libraries(shadow-preload-bitcoin ${GLIB_LIBRARIES} ${DL_LIBRARIES})
+install(TARGETS shadow-preload-bitcoin DESTINATION lib)
