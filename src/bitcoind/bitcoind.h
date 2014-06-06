@@ -16,6 +16,10 @@
 #include <netdb.h>
 #include <errno.h>
 
+#include <glib.h>
+#include <gmodule.h>
+
+
 #include <shd-library.h>
 
 typedef struct _BitcoinD BitcoinD;

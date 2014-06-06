@@ -74,3 +74,18 @@ void __shadow_plugin_init__(ShadowFunctionTable* shadowlibFuncs) {
 				"error registering bitcoind plug-in state");
 	}
 }
+
+/* called immediately after the plugin is loaded. shadow loads plugins once for
+ * each worker thread. the GModule* is needed as a handle for g_module_symbol()
+ * symbol lookups.
+ * return NULL for success, or a string describing the error */
+const gchar* g_module_check_init(GModule *module) {
+	/* clear our memory before initializing */
+	//memset(&scallion, 0, sizeof(Scallion));
+	fprintf(stderr, "gmodule init bitcoind\n");
+	/* do all the symbol lookups we will need now, and init our thread-specific
+	 * library of intercepted functions. */
+	bitcoindpreload_init(module);
+
+	return NULL;
+}

@@ -201,6 +201,7 @@ include_directories(AFTER ${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
 # build bitcode and plugins!
 #===================================================================
 
+add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
 add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
 add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 
@@ -212,6 +213,7 @@ add_bitcode(shadow-plugin-bitcoind-bitcode
 )
 add_plugin(shadow-plugin-bitcoind 
     shadow-plugin-bitcoind-bitcode
+    shadow-pth-bitcode
     shadow-bitcoin-bitcode
     shadow-leveldb-bitcode
 )
