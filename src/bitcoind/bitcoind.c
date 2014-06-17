@@ -18,7 +18,7 @@ struct _BitcoinD {
 
 static void _start_bitcoind(BitcoinD *bcd) {
 	//foo_test(12);
-	real_fprintf(stderr, "_start_bitcoind:about to read\n");
+	fprintf(stderr, "_start_bitcoind:about to read\n");
 	char buf[10] = "hiya!\n";
 	bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "shadow: about to read");
 	//_mark_isPlugin();

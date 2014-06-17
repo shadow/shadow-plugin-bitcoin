@@ -14,14 +14,18 @@
 #include <stdlib.h>
 #include <execinfo.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
+
 #include <glib.h>
 #include <gmodule.h>
-#include <sys/poll.h>
+
+#include "pth.h"
+#include "bitcoind.h"
 
 #define BITCOIND_LIB_PREFIX "intercept_"
 
 typedef ssize_t (*read_fp)(int, void*, size_t);
-typedef ssize_t (*write_fp)(int, void*, size_t);
+typedef ssize_t (*write_fp)(int, const void*, size_t);
 typedef int (*nanosleep_fp)(const struct timespec *, struct timespec *);
 typedef int (*usleep_fp)(unsigned int);
 typedef int (*sleep_fp)(unsigned int);
@@ -43,32 +47,81 @@ typedef ssize_t (*send_fp)(int, void *, size_t, int);
 typedef ssize_t (*recvfrom_fp)(int, void *, size_t, int, struct sockaddr *, socklen_t *);
 typedef ssize_t (*sendto_fp)(int, const void *, size_t, int, const struct sockaddr *, socklen_t);
 
+/* pth */
+
+typedef pth_t (*pth_spawn_fp)(pth_attr_t attr, void *(*func)(void *), void *arg);
+
+/* pthread */
+
+typedef int (*pthread_create_fp)(pthread_t*, const pthread_attr_t*,
+        void *(*start_routine) (void *), void *arg);
+typedef int (*pthread_detach_fp)(pthread_t);
+typedef int (*pthread_join_fp)(pthread_t, void **);
+typedef int (*pthread_once_fp)(pthread_once_t*, void (*init_routine)(void));
+typedef int (*pthread_key_create_fp)(pthread_key_t*, void (*destructor)(void*));
+typedef int (*pthread_setspecific_fp)(pthread_key_t, const void*);
+typedef void* (*pthread_getspecific_fp)(pthread_key_t);
+typedef int (*pthread_attr_setdetashstate_fp)(pthread_attr_t*, int);
+typedef int (*pthread_attr_getdetachstate_fp)(const pthread_attr_t*, int*);
+typedef int (*pthread_cond_init_fp)(pthread_cond_t*,
+              const pthread_condattr_t*);
+typedef int (*pthread_cond_destroy_fp)(pthread_cond_t*);
+typedef int (*pthread_cond_signal_fp)(pthread_cond_t*);
+typedef int (*pthread_cond_broadcast_fp)(pthread_cond_t*);
+typedef int (*pthread_cond_wait_fp)(pthread_cond_t*, pthread_mutex_t*);
+typedef int (*pthread_cond_timedwait_fp)(pthread_cond_t*, pthread_mutex_t*, const struct timespec*);
+typedef int (*pthread_mutex_init_fp)(pthread_mutex_t*,
+              const pthread_mutexattr_t*);
+typedef int (*pthread_mutex_destroy_fp)(pthread_mutex_t*);
+typedef int (*pthread_mutex_lock_fp)(pthread_mutex_t*);
+typedef int (*pthread_mutex_trylock_fp)(pthread_mutex_t*);
+typedef int (*pthread_mutex_unlock_fp)(pthread_mutex_t*);
+
 /* the key used to store each threads version of their searched function library.
  * the use this key to retrieve this library when intercepting functions from tor.
  */
-GStaticPrivate bitcoindWorkerKey;
+static GPrivate bitcoindWorkerKey = G_PRIVATE_INIT((GDestroyNotify)g_free);
 
-typedef struct _BitcoindPreloadWorker BitcoindPreloadWorker;
-/* TODO fix func names */
-struct _BitcoindPreloadWorker {
-	GModule* handle;
+typedef struct _FunctionTable FunctionTable;
+struct _FunctionTable {
+    read_fp read;
+    write_fp write;
+
 	read_fp pth_read;
 	write_fp pth_write;
+	pth_spawn_fp pth_spawn;
+
+    pthread_create_fp pthread_create;
+    pthread_detach_fp pthread_detach;
+    pthread_join_fp pthread_join;
+    pthread_once_fp pthread_once;
+    pthread_key_create_fp pthread_key_create;
+    pthread_setspecific_fp pthread_setspecific;
+    pthread_getspecific_fp pthread_getspecific;
+    pthread_attr_setdetashstate_fp pthread_attr_setdetashstate;
+    pthread_attr_getdetachstate_fp pthread_attr_getdetachstate;
+    pthread_cond_init_fp pthread_cond_init;
+    pthread_cond_destroy_fp pthread_cond_destroy;
+    pthread_cond_signal_fp pthread_cond_signal;
+    pthread_cond_broadcast_fp pthread_cond_broadcast;
+    pthread_cond_wait_fp pthread_cond_wait;
+    pthread_cond_timedwait_fp pthread_cond_timedwait;
+    pthread_mutex_init_fp pthread_mutex_init;
+    pthread_mutex_destroy_fp pthread_mutex_destroy;
+    pthread_mutex_lock_fp pthread_mutex_lock;
+    pthread_mutex_trylock_fp pthread_mutex_trylock;
+    pthread_mutex_unlock_fp pthread_mutex_unlock;
 };
 
-/* scallionpreload_init must be called before this so the worker gets created */
-static BitcoindPreloadWorker* _bitcoindpreload_getWorker() {
-	/* get current thread's private worker object */
-	BitcoindPreloadWorker* worker = g_static_private_get(&bitcoindWorkerKey);
-	g_assert(worker);
-	return worker;
-}
+typedef struct _BitcoindPreloadWorker BitcoindPreloadWorker;
 
-static BitcoindPreloadWorker* _bitcoindpreload_newWorker(GModule* handle) {
-	BitcoindPreloadWorker* worker = g_new0(BitcoindPreloadWorker, 1);
-	worker->handle = handle;
-	return worker;
-}
+struct _BitcoindPreloadWorker {
+	GModule* handle;
+	ExecutionContext activeContext;
+	long isPlugin;
+	FunctionTable ftable;
+	unsigned long isRecursive;
+};
 
 /* here we search and save pointers to the functions we need to call when
  * we intercept tor's functions. this is initialized for each thread, and each
@@ -77,7 +130,7 @@ static BitcoindPreloadWorker* _bitcoindpreload_newWorker(GModule* handle) {
  * not *node* dependent, only *thread* dependent.
  */
 
-#define SETSYM_OR_FAIL_(handle,funcptr, funcstr) {	\
+#define SETSYM_OR_FAIL_(handle, funcptr, funcstr) {	\
 	dlerror(); \
 	funcptr = dlsym(handle, funcstr); \
 	char* errorMessage = dlerror(); \
@@ -94,98 +147,474 @@ static BitcoindPreloadWorker* _bitcoindpreload_newWorker(GModule* handle) {
 #define SETSYM_OR_FAIL_DEFAULT(funcptr, funcstr) SETSYM_OR_FAIL_(RTLD_DEFAULT, funcptr, funcstr)
 
 void bitcoindpreload_init(GModule* handle) {
-	BitcoindPreloadWorker* worker = _bitcoindpreload_newWorker(handle);
+	BitcoindPreloadWorker* worker = g_new0(BitcoindPreloadWorker, 1);
+    worker->handle = handle;
 
 	/* lookup all our required symbols in this worker's module, asserting success */
-	g_assert(g_module_symbol(handle, "pth_read", (gpointer*)&worker->pth_read));
-	g_assert(g_module_symbol(handle, "pth_write", (gpointer*)&worker->pth_write));
-	//g_assert(g_module_symbol(handle, BITCOIND_LIB_PREFIX "read", (gpointer*)&(worker->_read)));
-	//g_assert(g_module_symbol(handle, BITCOIND_LIB_PREFIX "foo_test", (gpointer*)&(worker->_foo_test)));
+	g_assert(g_module_symbol(handle, "pth_read", (gpointer*)&worker->ftable.pth_read));
+	g_assert(g_module_symbol(handle, "pth_write", (gpointer*)&worker->ftable.pth_write));
+	g_assert(g_module_symbol(handle, "pth_spawn", (gpointer*)&worker->ftable.pth_spawn));
 
-	g_static_private_set(&bitcoindWorkerKey, worker, g_free);
+	/* lookup system and pthread calls that exist outside of the plug-in module.
+	 * do the lookup here and save to pointer so we dont have to redo the
+	 * lookup on every syscall */
+	SETSYM_OR_FAIL(worker->ftable.read, "read");
+	SETSYM_OR_FAIL(worker->ftable.write, "write");
+
+	SETSYM_OR_FAIL(worker->ftable.pthread_create, "pthread_create");
+	SETSYM_OR_FAIL(worker->ftable.pthread_detach, "pthread_detach");
+	SETSYM_OR_FAIL(worker->ftable.pthread_join, "pthread_join");
+	SETSYM_OR_FAIL(worker->ftable.pthread_once, "pthread_once");
+	SETSYM_OR_FAIL(worker->ftable.pthread_key_create, "pthread_key_create");
+	SETSYM_OR_FAIL(worker->ftable.pthread_setspecific, "pthread_setspecific");
+	SETSYM_OR_FAIL(worker->ftable.pthread_getspecific, "pthread_getspecific");
+	SETSYM_OR_FAIL(worker->ftable.pthread_attr_setdetashstate, "pthread_attr_setdetashstate");
+	SETSYM_OR_FAIL(worker->ftable.pthread_attr_getdetachstate, "pthread_attr_getdetachstate");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_init, "pthread_cond_init");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_destroy, "pthread_cond_destroy");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_signal, "pthread_cond_signal");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_broadcast, "pthread_cond_broadcast");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_wait, "pthread_cond_wait");
+	SETSYM_OR_FAIL(worker->ftable.pthread_cond_timedwait, "pthread_cond_timedwait");
+	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_init, "pthread_mutex_init");
+	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_destroy, "pthread_mutex_destroy");
+	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_lock, "pthread_mutex_lock");
+	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_trylock, "pthread_mutex_trylock");
+	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_unlock, "pthread_mutex_unlock");
+
+	g_private_set(&bitcoindWorkerKey, worker);
 }
 
-
-#define ENSURE(prefix, func) { \
-	if(!director.type.func) { \
-		SETSYM_OR_FAIL(director.type.func, prefix #func); \
-	} \
+void bitcoindpreload_setContext(ExecutionContext ctx) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    worker->activeContext = ctx;
 }
 
-static __thread unsigned long isRecursive = 0;
-__thread long isPlugin = 0;
-void _mark_isPlugin() { isPlugin += 1; }
-void _unmark_isPlugin() { isPlugin -= 1; }
+//#define ENSURE(prefix, func) { \
+//	if(!director.type.func) { \
+//		SETSYM_OR_FAIL(director.type.func, prefix #func); \
+//	} \
+//}
 
-int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
-	return sigprocmask(how, set, oset);
-}
+//int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
+//	return sigprocmask(how, set, oset);
+//}
 
-ssize_t shd_dl_read(int fp, void *d, size_t s) {
-	read_fp real;
-	SETSYM_OR_FAIL(real, "read");
-	_unmark_isPlugin();
-	int rc = real(fp, d, s);
-	_mark_isPlugin();
-	return rc;
-}
-ssize_t shd_dl_write(int fp, void *d, size_t s) {
-	write_fp real;
-	SETSYM_OR_FAIL(real, "write");
-	_unmark_isPlugin();
-	int rc = real(fp, d, s);
-	_mark_isPlugin();
-	return rc;
-}
+ssize_t write(int fp, const void *d, size_t s) {
+	BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+	ssize_t rc = 0;
 
-ssize_t real_fprintf(FILE *stream, const char *format, ...) {
-	char buf[1024];
-	va_list ap;
-	va_start(ap, format);
-	int s = vsnprintf(buf, sizeof(buf), format, ap);
-	va_end(ap);
-	return shd_dl_write(fileno(stream), buf, s);
-}
-
-ssize_t write(int fp, void *d, size_t s) {
-	BitcoindPreloadWorker* worker = g_static_private_get(&bitcoindWorkerKey);
-	//fprintf(stderr, "In bitcoind-preload.c write\n");
-	//real_fprintf(stderr, "write[%d]:%d [%d]\n", isPlugin, fp, s);
-
-	/* ensure don't intercept a local */
-	if (worker && (isPlugin > 0)) {
-		real_fprintf(stderr, "bitcoind-preload.c:write() about to go to pth\n");
-		return worker->pth_write(fp, d, s);
+	if(worker && worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+        rc = worker->ftable.pth_write(fp, d, s);
+        worker->activeContext = EXECTX_BITCOIN;
 	} else {
-		return shd_dl_write(fp, d, s);
+	    /* dont mess with shadow's calls, and dont change context */
+	    rc = worker->ftable.write(fp, d, s);
 	}
+
+	return rc;
 }
 
 ssize_t read(int fp, void *d, size_t s) {
-	BitcoindPreloadWorker* worker = g_static_private_get(&bitcoindWorkerKey);
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    ssize_t rc = 0;
 
-	fprintf(stderr, "In bitcoind-preload.c read\n");
-	int rc;
+    if(worker && worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+        rc = worker->ftable.pth_read(fp, d, s);
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        /* dont mess with shadow's calls, and dont change context */
+        rc = worker->ftable.read(fp, d, s);
+    }
 
-	/* ensure don't intercept a local */
-	//int ss = __sync_fetch_and_add(&isRecursive, 1);
-	fprintf(stderr, "c\n");
-	fprintf(stderr, "bitcoind-preload.c after fetch\n");
-	if (worker) {
-	//if (!ss && worker) {
-		fprintf(stdout, "bitcoind-preload.c:read(%d) pass to gnu pth\n", fp);
-		rc = worker->pth_read(fp, d, s);
-		//rc = 0;
-		fprintf(stdout, "bitcoind-preload.c:read(%d) pth read finished\n", fp);
-	} else {
-		read_fp real;
-		SETSYM_OR_FAIL(real, "read");
-		real_fprintf(stderr, "looking for real read real:%ld\n", real);
-		real_fprintf(stderr, "bitcoind-preload.c:read(%d) real:%ld\n", fp, real);
-		rc = real(fp, d, s);
-		real_fprintf(stderr, "real read returned %d\n", rc);
-	}
-	//__sync_fetch_and_sub(&isRecursive, 1);
-	real_fprintf(stderr, "returning %d\n", rc);
-	return rc;
+    return rc;
+}
+
+/**
+ * pthreads
+ */
+
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                          void *(*start_routine) (void *), void *arg) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+        pth_attr_t na;
+
+        if (thread == NULL || start_routine == NULL) {
+            errno = EINVAL;
+            rc = EINVAL;
+        } else {
+            na = (attr != NULL) ? *((pth_attr_t*)attr) : PTH_ATTR_DEFAULT;
+
+            *thread = (pthread_t)worker->ftable.pth_spawn(na, start_routine, arg);
+            if (thread == NULL) {
+                errno = EAGAIN;
+                rc = EAGAIN;
+            }
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_create(thread, attr, start_routine, arg);
+    }
+
+    return rc;
+}
+
+int pthread_detach(pthread_t thread) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+        pth_attr_t na;
+
+        if (thread == 0) {
+            errno = EINVAL;
+            rc = EINVAL;
+        } else if ((na = pth_attr_of((pth_t)thread)) == NULL ||
+                !pth_attr_set(na, PTH_ATTR_JOINABLE, FALSE)) {
+            rc = errno;
+        } else {
+            pth_attr_destroy(na);
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_detach(thread);
+    }
+
+    return rc;
+}
+
+int pthread_join(pthread_t thread, void **retval) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+        if (!pth_join((pth_t)thread, retval)) {
+            rc = errno;
+        } else if(retval != NULL && *retval == PTH_CANCELED) {
+            *retval = PTHREAD_CANCELED;
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_join(thread, retval);
+    }
+
+    return rc;
+}
+
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void)) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+        if (once_control == NULL || init_routine == NULL) {
+            errno = EINVAL;
+            rc = EINVAL;
+        } else {
+            if (*once_control != 1) {
+                worker->activeContext = EXECTX_BITCOIN;
+                init_routine();
+                worker->activeContext = EXECTX_PTH;
+            }
+            *once_control = 1;
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_once(once_control, init_routine);
+    }
+
+    return rc;
+}
+
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void*)) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+        if (!pth_key_create((pth_key_t *)key, destructor)) {
+            rc = errno;
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_key_create(key, destructor);
+    }
+
+    return rc;
+}
+
+int pthread_setspecific(pthread_key_t key, const void *value) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+        if (!pth_key_setdata((pth_key_t)key, value)) {
+            rc = errno;
+        }
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_setspecific(key, value);
+    }
+
+    return rc;
+}
+
+void *pthread_getspecific(pthread_key_t key) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    void* pointer = NULL;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+        pointer = pth_key_getdata((pth_key_t)key);
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        pointer = worker->ftable.pthread_getspecific(key);
+    }
+
+    return pointer;
+}
+
+int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_attr_setdetashstate(attr, detachstate);
+    }
+
+    return rc;
+}
+
+int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_attr_getdetachstate(attr, detachstate);
+    }
+
+    return rc;
+}
+
+int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_init(cond, attr);
+    }
+
+    return rc;
+}
+
+int pthread_cond_destroy(pthread_cond_t *cond) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_destroy(cond);
+    }
+
+    return rc;
+}
+
+int pthread_cond_signal(pthread_cond_t *cond) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_signal(cond);
+    }
+
+    return rc;
+}
+
+int pthread_cond_broadcast(pthread_cond_t *cond) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_broadcast(cond);
+    }
+
+    return rc;
+}
+
+int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_wait(cond, mutex);
+    }
+
+    return rc;
+}
+
+int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+              const struct timespec *abstime) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_cond_timedwait(cond, mutex, abstime);
+    }
+
+    return rc;
+}
+
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+    pth_mutex_t *m;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_mutex_init(mutex, attr);
+    }
+
+    return rc;
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_mutex_destroy(mutex);
+    }
+
+    return rc;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_mutex_lock(mutex);
+    }
+
+    return rc;
+}
+
+int pthread_mutex_trylock(pthread_mutex_t *mutex) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_mutex_trylock(mutex);
+    }
+
+    return rc;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+    BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
+    int rc = 0;
+
+    if(worker->activeContext == EXECTX_BITCOIN) {
+        worker->activeContext = EXECTX_PTH;
+
+
+
+        worker->activeContext = EXECTX_BITCOIN;
+    } else {
+        rc = worker->ftable.pthread_mutex_unlock(mutex);
+    }
+
+    return rc;
 }

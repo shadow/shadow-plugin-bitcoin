@@ -19,8 +19,16 @@
 #include <glib.h>
 #include <gmodule.h>
 
-
 #include <shd-library.h>
+
+typedef enum _ExecutionContext ExecutionContext;
+enum _ExecutionContext {
+    EXECTX_NONE, EXECTX_BITCOIN, EXECTX_PTH, EXECTX_SHADOW,
+};
+
+void bitcoindpreload_init(GModule* handle);
+void bitcoindpreload_setContext(ExecutionContext ctx);
+
 
 typedef struct _BitcoinD BitcoinD;
 
