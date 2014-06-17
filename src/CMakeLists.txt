@@ -165,8 +165,9 @@ ADD_CUSTOM_COMMAND (
    ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
    DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
 )
+ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
 
-set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
+#set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY TARGET_DEPENDS generate_pth)
 
 
 

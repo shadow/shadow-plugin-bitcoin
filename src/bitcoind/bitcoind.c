@@ -4,6 +4,7 @@
 
 #include "bitcoind.h"
 #include <pth.h>
+#include <pthread.h>
 
 /* all state is stored here */
 struct _BitcoinD {
@@ -17,10 +18,18 @@ struct _BitcoinD {
 
 static void _start_bitcoind(BitcoinD *bcd) {
 	//foo_test(12);
-	char buf[10];
-	fprintf(stderr, "About to read\n");
-	read(0, buf, 10);
-	printf("read 10 bytes from stdin\n");
+	real_fprintf(stderr, "_start_bitcoind:about to read\n");
+	char buf[10] = "hiya!\n";
+	bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "shadow: about to read");
+	//_mark_isPlugin();
+	write(2, buf, 6);
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+
+	//_unmark_isPlugin();
+	
+	//fprintf(stderr, "wrote\n");
+	bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "read 10 bytes from stdin");
 }
 
 /* if option is specified, run as client, else run as server */
@@ -36,39 +45,21 @@ BitcoinD* bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf) {
 	bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "bitcoin_new!!");
 
 	pth_spawn(PTH_ATTR_DEFAULT, (void * (*) (void *)) _start_bitcoind, bcd);
-	bitcoind_ready(bcd);
 
 	return bcd;
 }
 
+int bitcoind_getEpollDescriptor(BitcoinD *bcd) {
+	assert(bcd);
+	return bcd->ed;
+}
 
 void bitcoind_free(BitcoinD* bcd) {
 	assert(bcd);
-
 	free(bcd);
 }
 
 void bitcoind_ready(BitcoinD* bcd) {
-	assert(bcd);
-	struct epoll_event ev = {};
-	ev.events = EPOLLOUT | EPOLLIN | EPOLLRDHUP;
-	static int epd = -1;
-	if (epd > -1) {
-		ev.data.fd = epd;
-		epoll_ctl(bcd->ed, EPOLL_CTL_DEL, epd, &ev);
-		epd = -1;
-	}
-	pth_yield(NULL);
-	fprintf(stderr, "Master activate\n");
-	while (pth_ctrl(PTH_CTRL_GETTHREADS_READY | PTH_CTRL_GETTHREADS_NEW)) {
-		pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
-		pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
-		pth_yield(NULL);
-	}
-	epd = pth_waiting_epoll();
-	ev.data.fd = epd;
-	epoll_ctl(bcd->ed, EPOLL_CTL_ADD, epd, &ev);
-	fprintf(stderr, "Master exiting\n");
 }
 
 int foo_test(int a) {

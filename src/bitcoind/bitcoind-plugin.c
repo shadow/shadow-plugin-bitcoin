@@ -11,21 +11,6 @@ ShadowFunctionTable shadowlib;
 /* our opaque instance of the hello node */
 BitcoinD* bcdNodeInstance = NULL;
 
-/* shadow is creating a new instance of this plug-in as a node in
- * the simulation. argc and argv are as configured via the XML.
- */
-static void bitcoindplugin_new(int argc, char* argv[]) {
-	/* shadow wants to create a new node. pass this to the lower level
-	 * plug-in function that implements this for both plug-in and non-plug-in modes.
-	 * also pass along the interface shadow gave us earlier.
-	 *
-	 * the value of helloNodeInstance will be different for every node, because
-	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
-	 * each node needs its own application state.
-	 */
-	pth_init();
-	bcdNodeInstance = bitcoind_new(argc, argv, shadowlib.log);
-}
 
 /* shadow is freeing an existing instance of this plug-in that we previously
  * created in helloplugin_new()
@@ -42,7 +27,64 @@ static void bitcoindplugin_ready() {
 	/* shadow wants to handle some descriptor I/O. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
-	bitcoind_ready(bcdNodeInstance);
+	static int epd = -1;
+	int ed = bitcoind_getEpollDescriptor(bcdNodeInstance);
+
+	struct epoll_event ev = {};
+	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master activated");
+	epoll_wait(ed, &ev, 1, 0); // try to consume an event
+
+	if (epd > -1) {
+		epoll_ctl(ed, EPOLL_CTL_DEL, epd, NULL);
+		epd = -1;
+	}
+
+	ev.events = EPOLLOUT | EPOLLIN | EPOLLRDHUP;
+	pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
+	pth_yield(NULL); // go visit the scheduler at least once
+	while (pth_ctrl(PTH_CTRL_GETTHREADS_READY | PTH_CTRL_GETTHREADS_NEW)) {
+		//pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
+		pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
+		pth_yield(NULL);
+	}
+	epd = pth_waiting_epoll();
+	if (epd > -1) {
+		ev.data.fd = epd;
+		epoll_ctl(ed, EPOLL_CTL_ADD, epd, &ev);
+	}
+	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master exiting");
+
+	/* Figure out when the next timer would be */
+	struct timeval timeout = pth_waiting_timeout();
+	if (!(timeout.tv_sec == 0 && timeout.tv_usec == 0)) {
+		struct timeval now, delay;
+		gettimeofday(&now, NULL);
+		uint ms;
+		if (_timeval_subtract(&delay, &timeout, &now)) ms = 0;
+		else ms = 1 + delay.tv_sec*1000 + (delay.tv_usec+1)/1000;
+		shadowlib.log(SHADOW_LOG_LEVEL_DEBUG, __FUNCTION__, "Registering a callback for %d ms", ms);
+		shadowlib.createCallback((ShadowPluginCallbackFunc) bitcoind_ready, NULL, ms);
+	}
+}
+
+
+/* shadow is creating a new instance of this plug-in as a node in
+ * the simulation. argc and argv are as configured via the XML.
+ */
+static void bitcoindplugin_new(int argc, char* argv[]) {
+	/* shadow wants to create a new node. pass this to the lower level
+	 * plug-in function that implements this for both plug-in and non-plug-in modes.
+	 * also pass along the interface shadow gave us earlier.
+	 *
+	 * the value of helloNodeInstance will be different for every node, because
+	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
+	 * each node needs its own application state.
+	 */
+	pth_init();
+	bcdNodeInstance = bitcoind_new(argc, argv, shadowlib.log);
+
+	// Jog the threads once
+	bitcoindplugin_ready();
 }
 
 /* plug-in initialization. this only happens once per plug-in,
