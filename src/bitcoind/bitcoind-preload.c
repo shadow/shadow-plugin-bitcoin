@@ -84,33 +84,33 @@ static GPrivate bitcoindWorkerKey = G_PRIVATE_INIT((GDestroyNotify)g_free);
 
 typedef struct _FunctionTable FunctionTable;
 struct _FunctionTable {
-    read_fp read;
-    write_fp write;
-
+	read_fp read;
+	write_fp write;
+	
 	read_fp pth_read;
 	write_fp pth_write;
 	pth_spawn_fp pth_spawn;
-
-    pthread_create_fp pthread_create;
-    pthread_detach_fp pthread_detach;
-    pthread_join_fp pthread_join;
-    pthread_once_fp pthread_once;
-    pthread_key_create_fp pthread_key_create;
-    pthread_setspecific_fp pthread_setspecific;
-    pthread_getspecific_fp pthread_getspecific;
-    pthread_attr_setdetashstate_fp pthread_attr_setdetashstate;
-    pthread_attr_getdetachstate_fp pthread_attr_getdetachstate;
-    pthread_cond_init_fp pthread_cond_init;
-    pthread_cond_destroy_fp pthread_cond_destroy;
-    pthread_cond_signal_fp pthread_cond_signal;
-    pthread_cond_broadcast_fp pthread_cond_broadcast;
-    pthread_cond_wait_fp pthread_cond_wait;
-    pthread_cond_timedwait_fp pthread_cond_timedwait;
-    pthread_mutex_init_fp pthread_mutex_init;
-    pthread_mutex_destroy_fp pthread_mutex_destroy;
-    pthread_mutex_lock_fp pthread_mutex_lock;
-    pthread_mutex_trylock_fp pthread_mutex_trylock;
-    pthread_mutex_unlock_fp pthread_mutex_unlock;
+	
+	pthread_create_fp pthread_create;
+	pthread_detach_fp pthread_detach;
+	pthread_join_fp pthread_join;
+	pthread_once_fp pthread_once;
+	pthread_key_create_fp pthread_key_create;
+	pthread_setspecific_fp pthread_setspecific;
+	pthread_getspecific_fp pthread_getspecific;
+	pthread_attr_setdetashstate_fp pthread_attr_setdetashstate;
+	pthread_attr_getdetachstate_fp pthread_attr_getdetachstate;
+	pthread_cond_init_fp pthread_cond_init;
+	pthread_cond_destroy_fp pthread_cond_destroy;
+	pthread_cond_signal_fp pthread_cond_signal;
+	pthread_cond_broadcast_fp pthread_cond_broadcast;
+	pthread_cond_wait_fp pthread_cond_wait;
+	pthread_cond_timedwait_fp pthread_cond_timedwait;
+	pthread_mutex_init_fp pthread_mutex_init;
+	pthread_mutex_destroy_fp pthread_mutex_destroy;
+	pthread_mutex_lock_fp pthread_mutex_lock;
+	pthread_mutex_trylock_fp pthread_mutex_trylock;
+	pthread_mutex_unlock_fp pthread_mutex_unlock;
 };
 
 typedef struct _BitcoindPreloadWorker BitcoindPreloadWorker;
@@ -148,7 +148,7 @@ struct _BitcoindPreloadWorker {
 
 void bitcoindpreload_init(GModule* handle) {
 	BitcoindPreloadWorker* worker = g_new0(BitcoindPreloadWorker, 1);
-    worker->handle = handle;
+	worker->handle = handle;
 
 	/* lookup all our required symbols in this worker's module, asserting success */
 	g_assert(g_module_symbol(handle, "pth_read", (gpointer*)&worker->ftable.pth_read));
@@ -183,11 +183,103 @@ void bitcoindpreload_init(GModule* handle) {
 	SETSYM_OR_FAIL(worker->ftable.pthread_mutex_unlock, "pthread_mutex_unlock");
 
 	g_private_set(&bitcoindWorkerKey, worker);
+
+	assert(sizeof(pthread_t) >= sizeof(pth_t));
+	assert(sizeof(pthread_attr_t) >= sizeof(pth_attr_t));
 }
 
 void bitcoindpreload_setContext(ExecutionContext ctx) {
     BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
     worker->activeContext = ctx;
+}
+
+/* pth intercepted functions */
+
+int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
+	return sigprocmask(how, set, oset);
+}
+
+/*
+int shd_dl_nanosleep(const struct timespec *rqtp, struct timespec *rmtp) {
+  return nanosleep(rqtp, rmtp);
+}
+int shd_dl_usleep(unsigned int usec) {
+  return usleep(usec);
+}
+int shd_dl_sleep(unsigned int sec) {
+  return sleep(sec);
+}
+int shd_dl_system(const char *cmd) {
+  return system(cmd);
+}
+int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
+  return sigprocmask(how, set, oset);
+}
+int shd_dl_sigwait(const sigset_t *set, int *sigp) {
+  return sigwait(set, sigp);
+}
+pid_t shd_dl_waitpid(pid_t wpid, int *status, int options) {
+  return waitpid(wpid, status, options);
+}
+int shd_dl_connect(int s, const struct sockaddr *addr, socklen_t addrlen) {
+  return connect(s, addr, addrlen);
+}
+int shd_dl_accept(int s, struct sockaddr *addr, socklen_t *addrlen) {
+  return accept(s, addr, addrlen);
+}
+int shd_dl_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) {
+  return select(nfds, readfds, writefds, exceptfds, timeout);
+}
+int shd_dl_pselect(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, const struct timespec *ts, const sigset_t *mask) {
+  return pselect(nfds, rfds, wfds, efds, ts, mask);
+}
+int shd_dl_poll(struct pollfd *pfd, nfds_t nfd, int timeout) {
+  return poll(pfd, nfd, timeout);
+}
+ssize_t shd_dl_readv(int fd, const struct iovec *iov, int iovcnt) {
+  return readv(fd, iov, iovcnt);
+}
+ssize_t shd_dl_writev(int fd, const struct iovec *iov, int iovcnt) {
+  return writev(fd, iov, iovcnt);
+}
+ssize_t shd_dl_pread(int fd, void *buf, size_t nbytes, off_t offset) {
+  return pread(fd, buf, nbytes, offset);
+}
+ssize_t shd_dl_pwrite(int fd, const void *buf, size_t nbytes, off_t offset) {
+  return pwrite(fd, buf, nbytes, offset);
+}
+ssize_t shd_dl_recv(int fd, void *buf, size_t nbytes, int flags) {
+  return recv(fd, buf, nbytes, flags);
+}
+ssize_t shd_dl_send(int fd, void *buf, size_t nbytes, int flags) {
+  return send(fd, buf, nbytes, flags);
+}
+ssize_t shd_dl_recvfrom(int fd, void *buf, size_t nbytes, int flags, struct sockaddr *from, socklen_t *fromlen) {
+  return recvfrom(fd, buf, nbytes, flags, from, fromlen);
+}
+ssize_t shd_dl_sendto(int fd, const void *buf, size_t nbytes, int flags, const struct sockaddr *to, socklen_t tolen) {
+  return sendto(fd, buf, nbytes, flags, to, tolen);
+}
+*/
+
+ssize_t shd_dl_read(int fp, void *d, size_t s) {
+	LeveldbPreloadWorker* worker = g_private_get(&leveldbWorkerKey);
+	assert(worker);
+	ExecutionContext e = worker->activeContext;
+	worker->activeContext = EXECTX_PTH;
+	int rc = worker->ftable.read(fp, d, s);
+	worker->activeContext = e;
+	return rc;
+}
+
+ssize_t shd_dl_write(int fp, const void *d, size_t s) {
+	LeveldbPreloadWorker* worker = g_private_get(&leveldbWorkerKey);
+	assert(worker);
+	ExecutionContext e = worker->activeContext;
+	worker->activeContext = EXECTX_PTH;
+	int rc = worker->ftable.write(fp, d, s);
+	worker->activeContext = e;
+	return rc;
 }
 
 //#define ENSURE(prefix, func) { \

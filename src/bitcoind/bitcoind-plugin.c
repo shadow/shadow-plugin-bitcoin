@@ -19,15 +19,15 @@ static void bitcoindplugin_free() {
 	/* shadow wants to free a node. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
-    bitcoindpreload_setContext(EXECTX_BITCOIN);
+	bitcoindpreload_setContext(EXECTX_BITCOIN);
 	bitcoind_free(bcdNodeInstance);
 	bitcoindpreload_setContext(EXECTX_SHADOW);
 }
 
 /* shadow is notifying us that some descriptors are ready to read/write */
 static void bitcoindplugin_ready() {
-    bitcoindpreload_setContext(EXECTX_BITCOIN);
-
+	bitcoindpreload_setContext(EXECTX_BITCOIN);
+    
 	/* shadow wants to handle some descriptor I/O. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
@@ -48,7 +48,6 @@ static void bitcoindplugin_ready() {
 
 	ev.events = EPOLLOUT | EPOLLIN | EPOLLRDHUP;
 
-	bitcoindpreload_setContext(EXECTX_PTH);
 	pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
 	pth_yield(NULL); // go visit the scheduler at least once
 	while (pth_ctrl(PTH_CTRL_GETTHREADS_READY | PTH_CTRL_GETTHREADS_NEW)) {
@@ -66,7 +65,6 @@ static void bitcoindplugin_ready() {
 	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master exiting");
 
 	/* Figure out when the next timer would be */
-	bitcoindpreload_setContext(EXECTX_PTH);
 	struct timeval timeout = pth_waiting_timeout();
 	bitcoindpreload_setContext(EXECTX_BITCOIN);
 	if (!(timeout.tv_sec == 0 && timeout.tv_usec == 0)) {
@@ -98,10 +96,9 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
-    bitcoindpreload_setContext(EXECTX_PTH);
+	bitcoindpreload_setContext(EXECTX_BITCOIN);
 	pth_init();
 
-	bitcoindpreload_setContext(EXECTX_BITCOIN);
 	bcdNodeInstance = bitcoind_new(argc, argv, shadowlib.log);
 
 	// Jog the threads once
