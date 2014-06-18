@@ -195,102 +195,46 @@ void bitcoindpreload_setContext(ExecutionContext ctx) {
 
 /* pth intercepted functions */
 
-int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
-	return sigprocmask(how, set, oset);
-}
+#define _SHD_DL_BODY(func, ...) \
+	{\
+	BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);\
+	assert(worker);\
+	ExecutionContext e = worker->activeContext;\
+	worker->activeContext = EXECTX_PTH;\
+	int rc = worker->ftable.func(__VA_ARGS__);\
+	worker->activeContext = e;\
+	return rc;}
 
 /*
-int shd_dl_nanosleep(const struct timespec *rqtp, struct timespec *rmtp) {
-  return nanosleep(rqtp, rmtp);
-}
-int shd_dl_usleep(unsigned int usec) {
-  return usleep(usec);
-}
-int shd_dl_sleep(unsigned int sec) {
-  return sleep(sec);
-}
-int shd_dl_system(const char *cmd) {
-  return system(cmd);
-}
+int shd_dl_nanosleep(const struct timespec *rqtp, struct timespec *rmtp) _SHD_DL_BODY(nanosleep, rqtp, rmtp);
+int shd_dl_usleep(unsigned int usec) _SHD_DL_BODY(usleep,usec);
+int shd_dl_sleep(unsigned int sec) _SHD_DL_BODY(sleep,sec);
+int shd_dl_system(const char *cmd) _SHD_DL_BODY(system,cmd);
+int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) _SHD_DL_BODY(sigprocmask, how, set, oset);
+int shd_dl_sigwait(const sigset_t *set, int *sigp) _SHD_DL_BODY(sigwait, set, sigp);
+pid_t shd_dl_waitpid(pid_t wpid, int *status, int options) _SHD_DL_BODY(waitpid, wpid, status, options);
+int shd_dl_connect(int s, const struct sockaddr *addr, socklen_t addrlen) _SHD_DL_BODY(connect, s, addr, addrlen);
+int shd_dl_accept(int s, struct sockaddr *addr, socklen_t *addrlen) _SHD_DL_BODY(accept, s, addr, addrlen);
+int shd_dl_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) _SHD_DL_BODY(select, nfds, readfds, writefds, exceptfds, timeout);
+int shd_dl_pselect(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, const struct timespec *ts, const sigset_t *mask) _SHD_DL_BODY(pselect, nfds, rfds, wfds, efds, ts, mask);
+int shd_dl_poll(struct pollfd *pfd, nfds_t nfd, int timeout) _SHD_DL_BODY(poll, pfd, nfd, timeout);
+ssize_t shd_dl_readv(int fd, const struct iovec *iov, int iovcnt) _SHD_DL_BODY(readv, fd, iov, iovcnt);
+ssize_t shd_dl_writev(int fd, const struct iovec *iov, int iovcnt) _SHD_DL_BODY(writev, fd, iov, iovcnt);
+ssize_t shd_dl_pread(int fd, void *buf, size_t nbytes, off_t offset) _SHD_DL_BODY(pread, fd, buf, nbytes, offset);
+ssize_t shd_dl_pwrite(int fd, const void *buf, size_t nbytes, off_t offset) _SHD_DL_BODY(pwrite, fd, buf, nbytes, offset);
+ssize_t shd_dl_recv(int fd, void *buf, size_t nbytes, int flags) _SHD_DL_BODY(recv, fd, buf, nbytes, flags);
+ssize_t shd_dl_send(int fd, void *buf, size_t nbytes, int flags) _SHD_DL_BODY(send, fd, buf, nbytes, flags);
+ssize_t shd_dl_recvfrom(int fd, void *buf, size_t nbytes, int flags, struct sockaddr *from, socklen_t *fromlen) _SHD_DL_BODY(recvfrom, fd, buf, nbytes, flags, from, fromlen);
+ssize_t shd_dl_sendto(int fd, const void *buf, size_t nbytes, int flags, const struct sockaddr *to, socklen_t tolen) _SHD_DL_BODY(sendto, fd, buf, nbytes, flags, to, tolen);
+*/
+ssize_t shd_dl_read(int fp, void *d, size_t s) _SHD_DL_BODY(read, fp, d, s);
+ssize_t shd_dl_write(int fp, const void *d, size_t s) _SHD_DL_BODY(write, fp, d, s);
 int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
   return sigprocmask(how, set, oset);
 }
-int shd_dl_sigwait(const sigset_t *set, int *sigp) {
-  return sigwait(set, sigp);
-}
-pid_t shd_dl_waitpid(pid_t wpid, int *status, int options) {
-  return waitpid(wpid, status, options);
-}
-int shd_dl_connect(int s, const struct sockaddr *addr, socklen_t addrlen) {
-  return connect(s, addr, addrlen);
-}
-int shd_dl_accept(int s, struct sockaddr *addr, socklen_t *addrlen) {
-  return accept(s, addr, addrlen);
-}
-int shd_dl_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) {
-  return select(nfds, readfds, writefds, exceptfds, timeout);
-}
-int shd_dl_pselect(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, const struct timespec *ts, const sigset_t *mask) {
-  return pselect(nfds, rfds, wfds, efds, ts, mask);
-}
-int shd_dl_poll(struct pollfd *pfd, nfds_t nfd, int timeout) {
-  return poll(pfd, nfd, timeout);
-}
-ssize_t shd_dl_readv(int fd, const struct iovec *iov, int iovcnt) {
-  return readv(fd, iov, iovcnt);
-}
-ssize_t shd_dl_writev(int fd, const struct iovec *iov, int iovcnt) {
-  return writev(fd, iov, iovcnt);
-}
-ssize_t shd_dl_pread(int fd, void *buf, size_t nbytes, off_t offset) {
-  return pread(fd, buf, nbytes, offset);
-}
-ssize_t shd_dl_pwrite(int fd, const void *buf, size_t nbytes, off_t offset) {
-  return pwrite(fd, buf, nbytes, offset);
-}
-ssize_t shd_dl_recv(int fd, void *buf, size_t nbytes, int flags) {
-  return recv(fd, buf, nbytes, flags);
-}
-ssize_t shd_dl_send(int fd, void *buf, size_t nbytes, int flags) {
-  return send(fd, buf, nbytes, flags);
-}
-ssize_t shd_dl_recvfrom(int fd, void *buf, size_t nbytes, int flags, struct sockaddr *from, socklen_t *fromlen) {
-  return recvfrom(fd, buf, nbytes, flags, from, fromlen);
-}
-ssize_t shd_dl_sendto(int fd, const void *buf, size_t nbytes, int flags, const struct sockaddr *to, socklen_t tolen) {
-  return sendto(fd, buf, nbytes, flags, to, tolen);
-}
-*/
 
-ssize_t shd_dl_read(int fp, void *d, size_t s) {
-	LeveldbPreloadWorker* worker = g_private_get(&leveldbWorkerKey);
-	assert(worker);
-	ExecutionContext e = worker->activeContext;
-	worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.read(fp, d, s);
-	worker->activeContext = e;
-	return rc;
-}
 
-ssize_t shd_dl_write(int fp, const void *d, size_t s) {
-	LeveldbPreloadWorker* worker = g_private_get(&leveldbWorkerKey);
-	assert(worker);
-	ExecutionContext e = worker->activeContext;
-	worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.write(fp, d, s);
-	worker->activeContext = e;
-	return rc;
-}
-
-//#define ENSURE(prefix, func) { \
-//	if(!director.type.func) { \
-//		SETSYM_OR_FAIL(director.type.func, prefix #func); \
-//	} \
-//}
-
-//int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
-//	return sigprocmask(how, set, oset);
-//}
+/* Interposition of system functions */
 
 ssize_t write(int fp, const void *d, size_t s) {
 	BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
