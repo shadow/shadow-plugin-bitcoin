@@ -458,8 +458,8 @@ int pthread_attr_getdetachstate(const pthread_attr_t *attr, int *detachstate) {
 	return rc;
 }
 
+
 int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) {
-	assert(0);
 	pthread_cond_init_fp real;
 	SETSYM_OR_FAIL(real, "pthread_cond_init");
 	return real(cond, attr);
