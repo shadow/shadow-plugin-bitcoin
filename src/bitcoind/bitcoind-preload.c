@@ -83,6 +83,11 @@ typedef int (*pthread_mutex_unlock_fp)(pthread_mutex_t*);
  */
 static GPrivate bitcoindWorkerKey = G_PRIVATE_INIT((GDestroyNotify)g_free);
 
+/* track if we are in a recursive loop to avoid infinite recursion.
+ * threads MUST access this via &isRecursive to ensure each has its own copy
+ * http://gcc.gnu.org/onlinedocs/gcc-4.3.6/gcc/Thread_002dLocal.html */
+static __thread unsigned long isRecursive = 0;
+
 typedef struct _FunctionTable FunctionTable;
 struct _FunctionTable {
 	read_fp read;
@@ -380,10 +385,23 @@ int pthread_once(pthread_once_t *once_control, void (*init_routine)(void)) {
 	return rc;
 }
 
-/*
+
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void*)) {
-	printf("leveldbWorkerKey:%d\n", leveldbWorkerKey);
-	LeveldbPreloadWorker* worker = g_private_get(&leveldbWorkerKey);
+    if(__sync_fetch_and_add(&isRecursive, 1)) {
+        /* not recursive */
+
+    } else {
+        /* is a recursive call, do the lookup and always forward */
+        pthread_key_create_fp real;
+        SETSYM_OR_FAIL(real, "pthread_key_create");
+        int rc = real(key, destructor);
+        __sync_fetch_and_sub(&isRecursive, 1);
+        return rc;
+    }
+    __sync_fetch_and_sub(&isRecursive, 1);
+
+	printf("bitcoindWorkerKey:%p\n", &bitcoindWorkerKey);
+	BitcoindPreloadWorker* worker = g_private_get(&bitcoindWorkerKey);
 	assert(0);
 	if (!worker) {
 		assert(0);
@@ -404,7 +422,7 @@ int pthread_key_create(pthread_key_t *key, void (*destructor)(void*)) {
         worker->activeContext = EXECTX_BITCOIN;
 	return rc;
 }
-
+/*
 int pthread_setspecific(pthread_key_t key, const void *value) {
 	_FTABLE_GUARD(pthread_setspecific, key, value);
 	int rc = 0;
