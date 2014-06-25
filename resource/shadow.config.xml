@@ -33,7 +33,7 @@
 
     <!-- the plug-ins we will be using -->
 	<plugin id="bitcoind" path="libshadow-plugin-bitcoind.so" />
-	<plugin id="bitcoincli" path="libshadow-plugin-bitcoincli.so" />
+	<!--<plugin id="bitcoincli" path="libshadow-plugin-bitcoincli.so" />-->
 
     <!-- the length of our experiment in seconds -->
     <kill time="1800" />
@@ -42,7 +42,9 @@
 	<node id="bcdnode">
 	    <application plugin="bitcoind" time="13" arguments="NULL" />
     </node>
+    <!--
     <node id="bccnode">
         <application plugin="bitcoincli" time="13" arguments="NULL" />
     </node>
+    -->
 </shadow>

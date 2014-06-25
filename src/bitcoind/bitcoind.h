@@ -23,7 +23,7 @@
 
 typedef enum _ExecutionContext ExecutionContext;
 enum _ExecutionContext {
-    EXECTX_NONE, EXECTX_BITCOIN, EXECTX_PTH, EXECTX_SHADOW,
+    EXECTX_NONE, EXECTX_PLUGIN, EXECTX_PTH, EXECTX_SHADOW,
 };
 
 void bitcoindpreload_init(GModule* handle);

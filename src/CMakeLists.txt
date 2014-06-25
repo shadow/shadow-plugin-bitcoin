@@ -165,10 +165,10 @@ ADD_CUSTOM_COMMAND (
    ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
    DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
 )
-ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
-
-#set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY TARGET_DEPENDS generate_pth)
-
+#ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
+#set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS pth_p.h)
+add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
+add_dependencies(shadow-pth-bitcode generate_pth)
 
 
 #===================================================================
@@ -202,7 +202,6 @@ include_directories(AFTER ${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
 # build bitcode and plugins!
 #===================================================================
 
-add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
 add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
 add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 
@@ -210,7 +209,7 @@ add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 add_bitcode(shadow-plugin-bitcoind-bitcode 
     ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
     bitcoind/bitcoind-plugin.c
-    bitcoind/bitcoind.c
+    bitcoind/bitcoind_.cpp
 )
 add_plugin(shadow-plugin-bitcoind 
     shadow-plugin-bitcoind-bitcode
