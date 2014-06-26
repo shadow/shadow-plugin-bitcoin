@@ -24,12 +24,11 @@ void *doNothing(void*) {
 	return NULL;
 }
 
+extern "C"
 void bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf) {
 	assert(slogf);
 	fprintf(stderr, "_start_bitcoind:about to read\n");
 	char buf[10] = "hiya!\n";
-	//bcd->slogf(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "shadow: about to read");
-	//_mark_isPlugin();
 	write(2, buf, 6);
 	pthread_t thread;
 	pthread_attr_t attr;
@@ -37,3 +36,4 @@ void bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf) {
 	pthread_create(&thread, 0, &doNothing, 0);
 	pthread_join(thread, 0);
 }
+

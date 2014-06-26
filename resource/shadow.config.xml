@@ -39,8 +39,8 @@
     <kill time="1800" />
 
     <!-- our nodes -->
-	<node id="bcdnode">
-	    <application plugin="bitcoind" time="13" arguments="NULL" />
+    <node id="bcdnode">
+        <application plugin="bitcoind" time="13" arguments="NULL" />
     </node>
     <!--
     <node id="bccnode">

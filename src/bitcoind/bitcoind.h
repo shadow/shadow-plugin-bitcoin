@@ -32,7 +32,7 @@ void bitcoindpreload_setContext(ExecutionContext ctx);
 
 typedef struct _BitcoinD BitcoinD;
 
-BitcoinD* bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf);
+void bitcoind_new(int argc, char* argv[], ShadowLogFunc slogf);
 void bitcoind_free(BitcoinD* h);
 void bitcoind_ready(BitcoinD* h);
 int bitcoind_getEpollDescirptor(BitcoinD* h);

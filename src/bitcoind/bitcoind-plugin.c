@@ -98,7 +98,7 @@ static void bitcoindplugin_ready() {
 		else ms = 1 + delay.tv_sec*1000 + (delay.tv_usec+1)/1000;
 
 		shadowlib.log(SHADOW_LOG_LEVEL_DEBUG, __FUNCTION__, "Registering a callback for %d ms", ms);
-		shadowlib.createCallback((ShadowPluginCallbackFunc) bitcoind_ready, NULL, ms);
+		shadowlib.createCallback((ShadowPluginCallbackFunc) bitcoindplugin_ready, NULL, ms);
 	}
 }
 
@@ -107,12 +107,13 @@ static void bitcoindplugin_ready() {
  */
 struct args_t {int argc; char **argv; ShadowLogFunc slogf;};
 
-void _bitcoind_new(struct args_t *args) {
+void *_bitcoind_new(struct args_t *args) {
 	assert(args);
 	int argc = args->argc;
 	char **argv = args->argv;
 	ShadowLogFunc slogf = args->slogf;
 	bitcoind_new(argc, argv, slogf);
+	return 0;
 }
 
 /* shadow is creating a new instance of this plug-in as a node in
@@ -132,7 +133,7 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 
 	//helloNodeInstance = hello_new(argc, argv, shadowlib.log);
 	struct args_t args = {argc, argv, shadowlib.log};
-	pth_t t = pth_spawn(PTH_ATTR_DEFAULT, &_bitcoind_new, &args);
+	pth_t t = pth_spawn(PTH_ATTR_DEFAULT, (void *(*)(void*))&_bitcoind_new, &args);
 	bitcoindpreload_setContext(EXECTX_PLUGIN);
 
 	// Jog the threads once

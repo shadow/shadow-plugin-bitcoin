@@ -207,9 +207,9 @@ add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
 
 # bitcoind plugin
 add_bitcode(shadow-plugin-bitcoind-bitcode 
-    ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
     bitcoind/bitcoind-plugin.c
-    bitcoind/bitcoind_.cpp
+    bitcoind/bitcoind-base.cpp
+    ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
 )
 add_plugin(shadow-plugin-bitcoind 
     shadow-plugin-bitcoind-bitcode
