@@ -11,40 +11,89 @@ This repository holds a Shadow plug-in that runs bitcoind. It can be used to run
 
 Fedora:
 
-```
-sudo yum install libstdc++ libstdc++-devel boost boost-devel
+```bash
+sudo yum install libstdc++ libstdc++-devel clang clang-devel llvm llvm-devel glib2 glib2-devel
 ```
 
-## setup plugin
+Ubuntu:
 
-### get and configure bitcoin
+```bash
+sudo apt-get install libstdc++ libstdc++-dev clang llvm llvm-dev
+```
+
+## setup plug-in and custom build requirements
+
+There are several custom build requirements which we will build from the `build` directory:
+
+```bash
+git clone git@github.com:amiller/shadow-plugin-bitcoin.git
+cd shadow-plugin-bitcoin
+git checkout with-pth
+mkdir build; cd build
+```
+
+### openssl
+
+```bash
+wget https://www.openssl.org/source/openssl-1.0.1h.tar.gz
+tar xaf openssl-1.0.1h.tar.gz
+cd openssl-1.0.1h
+./config --prefix=/home/${USER}/.shadow shared threads enable-ec_nistp_64_gcc_128 -fPIC
+make depend
+make
+make install_sw
+cd ..
+```
+
+### boost
+
+```bash
+wget http://downloads.sourceforge.net/project/boost/boost/1.50.0/boost_1_50_0.tar.gz
+tar xaf boost_1_50_0.tar.gz
+cd boost_1_50_0
+./bootstrap.sh --with-libraries=filesystem,system,thread,program_options
+cd ..
+```
+
+### gnu pth
+
+```bash
+git clone git@github.com:amiller/gnu-pth.git
+cd gnu-pth
+git checkout -b shadow
+cd ..
+```
+
+### bitcoin
 
 We need to get the bitcoin source so we can compile it into our Shadow plug-in, and then configure it to obtain a proper `bitcoin-config.h` file.
 
 ```bash
-cd shadow-plugin-bitcoin
-mkdir build
-cd build
 git clone https://github.com/bitcoin/bitcoin.git
 cd bitcoin
 ./autogen.sh
-PKG_CONFIG_PATH=`readlink -f ~`/.shadow/lib/pkgconfig LDFLAGS=-L`readlink -f ~`/.shadow/lib CFLAGS=-I`readlink -f ~`/.shadow/include ./configure --prefix=`readlink -f ~`/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
+PKG_CONFIG_PATH=/home/${USER}/.shadow/lib/pkgconfig LDFLAGS=-L/home/${USER}/.shadow/lib CFLAGS=-I/home/${USER}/.shadow/include ./configure --prefix=/home/${USER}/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
 cd ..
 ```
 
-Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify a custom install path of a custom compiled OpenSSL.
+Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify the install path of our custom-built OpenSSL.
 
-### build plugin using cmake
+### shadow-plugin-bitcoin
+
+Now we are ready to build the actual Shadow plug-in using cmake.
 
 ```bash
-CC=`which clang` CXX=`which clang++` cmake ..
+mkdir shadow-plugin-bitcoin; cd shadow-plugin-bitcoin
+CC=`which clang` CXX=`which clang++` cmake ../..
 make -jN
 make install
 ```
 
 Replace `N` with the number of cores you want to use for a parallel build.
 
-## cmake options
+## other potentially useful information
+
+### cmake options
 
 The `cmake` command above takes multiple options, specified as
 
@@ -66,7 +115,7 @@ For example, the following will fully specify the default options:
 CC=`which clang` CXX=`which clang++` cmake .. -DSHADOW_ROOT=/home/rob/.shadow -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX=/home/rob/.shadow -DCMAKE_PREFIX_PATH=/home/rob/.shadow
 ```
 
-## troubleshooting
+### troubleshooting
 
 First try rebuilding to ensure that the cmake cache is up to date
 
@@ -83,7 +132,7 @@ CC=`which clang` CXX=`which clang++` cmake ..
 VERBOSE=1 make
 ```
 
-## contributing
+### contributing
 
-Please feel free to submit pull requests to contribute.
+Please contribute by submitting pull requests via GitHub.
 

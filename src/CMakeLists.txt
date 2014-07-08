@@ -1,11 +1,4 @@
 #===================================================================
-# Bitcoin source location
-#===================================================================
-
-#get_filename_component(BITCOIN_ROOT_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
-set(BITCOIN_ROOT_DIR ${CMAKE_BINARY_DIR}/bitcoin)
-
-#===================================================================
 # Check Bitcoin Dependencies
 #===================================================================
 
@@ -22,18 +15,18 @@ message(STATUS "CMAKE_USE_PTHREADS_INIT = ${CMAKE_USE_PTHREADS_INIT}")
 message(STATUS "CMAKE_THREAD_LIBS_INIT = ${CMAKE_THREAD_LIBS_INIT}")
 
 # boost - set options BEFORE find_package()
-set(BOOST_INCLUDEDIR /home/amiller/.local/include)
-set(BOOST_LIBRARYDIR /home/amiller/.local/lib)
-set(Boost_NO_SYSTEM_PATHS ON) 
-set(Boost_USE_STATIC_LIBS OFF) 
-set(Boost_USE_MULTITHREADED ON)  
-set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.45.0 REQUIRED COMPONENTS system filesystem thread program_options)
-if(NOT Boost_FOUND)
-    message(FATAL_ERROR "Could not locate Boost.")
-endif()
-message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
-message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
+#set(BOOST_INCLUDEDIR /home/amiller/.local/include)
+#set(BOOST_LIBRARYDIR /home/amiller/.local/lib)
+#set(Boost_NO_SYSTEM_PATHS ON) 
+#set(Boost_USE_STATIC_LIBS OFF) 
+#set(Boost_USE_MULTITHREADED ON)  
+#set(Boost_USE_STATIC_RUNTIME OFF)
+#find_package(Boost 1.45.0 REQUIRED COMPONENTS system filesystem thread program_options)
+#if(NOT Boost_FOUND)
+#    message(FATAL_ERROR "Could not locate Boost.")
+#endif()
+#message(STATUS "Boost_INCLUDE_DIRS = ${Boost_INCLUDE_DIRS}")
+#message(STATUS "Boost_LIBRARIES = ${Boost_LIBRARIES}")
 
 # openssl
 find_package(OpenSSL REQUIRED)
@@ -45,10 +38,51 @@ message(STATUS "OPENSSL_INCLUDE_DIR = ${OPENSSL_INCLUDE_DIR}")
 message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
 
 #===================================================================
-# package files
+# boost
 #===================================================================
 
-# bitcoin first
+set(BOOST_ROOT_DIR ${CMAKE_BINARY_DIR}/boost_1_50_0)
+
+set(boost_sources
+    ${BOOST_ROOT_DIR}/libs/chrono/src/chrono.cpp
+    ${BOOST_ROOT_DIR}/libs/chrono/src/thread_clock.cpp
+    ${BOOST_ROOT_DIR}/libs/chrono/src/process_cpu_clocks.cpp
+
+    ${BOOST_ROOT_DIR}/libs/system/src/error_code.cpp
+
+    ${BOOST_ROOT_DIR}/libs/thread/src/pthread/thread.cpp
+    ${BOOST_ROOT_DIR}/libs/thread/src/pthread/once.cpp
+    ${BOOST_ROOT_DIR}/libs/thread/src/future.cpp
+
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/codecvt_error_category.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/operations.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/path.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/path_traits.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/portability.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/unique_path.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/utf8_codecvt_facet.cpp
+    ${BOOST_ROOT_DIR}/libs/filesystem/src/windows_file_codecvt.cpp
+
+    ${BOOST_ROOT_DIR}/libs/program_options/src/cmdline.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/config_file.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/options_description.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/parsers.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/variables_map.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/value_semantic.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/positional_options.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/utf8_codecvt_facet.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/convert.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/winmain.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
+)
+
+#===================================================================
+# bitcoin
+#===================================================================
+
+#get_filename_component(BITCOIN_ROOT_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
+set(BITCOIN_ROOT_DIR ${CMAKE_BINARY_DIR}/bitcoin)
+
 #aux_source_directory(${BITCOIN_ROOT_DIR}/src bitcoin_sources)
 #list(REMOVE_ITEM bitcoin_sources
 #    ${BITCOIN_ROOT_DIR}/src/db.cpp
@@ -96,12 +130,17 @@ set(bitcoin_sources
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
 
-# now leveldb
-aux_source_directory(${BITCOIN_ROOT_DIR}/src/leveldb/db leveldb_db_sources)
-aux_source_directory(${BITCOIN_ROOT_DIR}/src/leveldb/util leveldb_util_sources)
-aux_source_directory(${BITCOIN_ROOT_DIR}/src/leveldb/table leveldb_table_sources)
-aux_source_directory(${BITCOIN_ROOT_DIR}/src/leveldb/port leveldb_port_sources)
-aux_source_directory(${BITCOIN_ROOT_DIR}/src/leveldb/helpers/memenv leveldb_memenv_sources)
+#===================================================================
+# leveldb
+#===================================================================
+
+set(LEVELDB_ROOT_DIR ${BITCOIN_ROOT_DIR}/src/leveldb)
+
+aux_source_directory(${LEVELDB_ROOT_DIR}/db leveldb_db_sources)
+aux_source_directory(${LEVELDB_ROOT_DIR}/util leveldb_util_sources)
+aux_source_directory(${LEVELDB_ROOT_DIR}/table leveldb_table_sources)
+aux_source_directory(${LEVELDB_ROOT_DIR}/port leveldb_port_sources)
+aux_source_directory(${LEVELDB_ROOT_DIR}/helpers/memenv leveldb_memenv_sources)
 set(leveldb_all_sources
     ${leveldb_db_sources}
     ${leveldb_util_sources}
@@ -120,16 +159,16 @@ foreach(file ${leveldb_all_sources})
 endforeach()
 
 list(REMOVE_ITEM leveldb_sources
-    ${BITCOIN_ROOT_DIR}/src/leveldb/db/db_bench.cc
-    ${BITCOIN_ROOT_DIR}/src/leveldb/db/leveldb_main.cc
-    ${BITCOIN_ROOT_DIR}/src/leveldb/port/port_win.cc
-    ${BITCOIN_ROOT_DIR}/src/leveldb/util/testharness.cc
-    ${BITCOIN_ROOT_DIR}/src/leveldb/util/testutil.cc
+    ${LEVELDB_ROOT_DIR}/db/db_bench.cc
+    ${LEVELDB_ROOT_DIR}/db/leveldb_main.cc
+    ${LEVELDB_ROOT_DIR}/port/port_win.cc
+    ${LEVELDB_ROOT_DIR}/util/testharness.cc
+    ${LEVELDB_ROOT_DIR}/util/testutil.cc
 )
 
-#=============
-# Pth building
-#=============
+#===================================================================
+# pth
+#===================================================================
 
 set(PTH_ROOT_DIR ${CMAKE_BINARY_DIR}/gnu-pth)
 include_directories(${PTH_ROOT_DIR})
@@ -180,6 +219,20 @@ add_dependencies(shadow-pth-bitcode generate_pth)
 
 add_definitions( "-DHAS_BOOST -DHAVE_WORKING_BOOST_SLEEP" )
 
+#-DBOOST_ALL_DYN_LINK=1
+#-DBOOST_ALL_NO_LIB=1
+#-DBOOST_CHRONO_STATIC_LINK=1
+#-DBOOST_SYSTEM_DYN_LINK=1
+#-DBOOST_SYSTEM_STATIC_LINK=1
+#-DBOOST_SYSTEM_NO_DEPRECATED
+#-DBOOST_FILESYSTEM_DYN_LINK=1
+#-DBOOST_FILESYSTEM_STATIC_LINK=1
+#-DBOOST_PROGRAM_OPTIONS_DYN_LINK=1
+#-DBOOST_THREAD_POSIX
+#-DBOOST_THREAD_BUILD_LIB=1
+
+add_definitions( "-DBOOST_ALL_DYN_LINK=1 -DBOOST_ALL_NO_LIB=1 -DBOOST_THREAD_POSIX" )
+
 # Generate bitcoin-config.h substituting config vars for include:
 #configure_file(${CONTRIB_CURRENT_SOURCE_DIR}/bitcoin-config.h.cmake
 #               ${CMAKE_CURRENT_BINARY_DIR}/bitcoin-config.h @ONLY)
@@ -193,21 +246,24 @@ add_definitions( "-DLEVELDB_PLATFORM_POSIX" )
 # includes
 #===================================================================
 
-include_directories(${CMAKE_SOURCE_DIR}/src/)
-include_directories(${BITCOIN_ROOT_DIR}/src
-    ${BITCOIN_ROOT_DIR}/src/leveldb
-    ${BITCOIN_ROOT_DIR}/src/leveldb/include
-    ${BITCOIN_ROOT_DIR}/src/leveldb/helpers
-    ${BITCOIN_ROOT_DIR}/src/leveldb/helpers/memenv
+include_directories(${CMAKE_SOURCE_DIR}/src)
+    ${BITCOIN_ROOT_DIR}/src
+    ${LEVELDB_ROOT_DIR}
+    ${LEVELDB_ROOT_DIR}/include
+    ${LEVELDB_ROOT_DIR}/helpers
+    ${LEVELDB_ROOT_DIR}/helpers/memenv
+    ${PTH_ROOT_DIR}
+    ${BOOST_ROOT_DIR}
 )
-include_directories(AFTER ${Boost_INCLUDE_DIRS} ${OPENSSL_INCLUDE_DIR})
+include_directories(AFTER ${OPENSSL_INCLUDE_DIR})
 
 #===================================================================
 # build bitcode and plugins!
 #===================================================================
 
-add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
+add_bitcode(shadow-boost-bitcode ${boost_sources})
 add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
+add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
 
 # bitcoind plugin
 add_bitcode(shadow-plugin-bitcoind-bitcode 
@@ -220,10 +276,10 @@ add_plugin(shadow-plugin-bitcoind
     shadow-pth-bitcode
     shadow-bitcoin-bitcode
     shadow-leveldb-bitcode
+    shadow-boost-bitcode
 )
 target_link_libraries(shadow-plugin-bitcoind 
     ${CMAKE_THREAD_LIBS_INIT}
-    ${Boost_LIBRARIES}
     ${OPENSSL_LIBRARIES}
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
@@ -238,10 +294,10 @@ add_plugin(shadow-plugin-bitcoincli
     shadow-plugin-bitcoincli-bitcode
     shadow-bitcoin-bitcode
     shadow-leveldb-bitcode
+    shadow-boost-bitcode
 )
 target_link_libraries(shadow-plugin-bitcoincli 
     ${CMAKE_THREAD_LIBS_INIT}
-    ${Boost_LIBRARIES}
     ${OPENSSL_LIBRARIES}
 )
 install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
