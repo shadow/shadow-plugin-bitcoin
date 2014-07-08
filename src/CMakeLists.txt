@@ -255,6 +255,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src
     ${BOOST_ROOT_DIR}
     ${PTH_ROOT_DIR}
     ${BITCOIN_ROOT_DIR}/src
+    ${BITCOIN_ROOT_DIR}/src/config
     ${LEVELDB_ROOT_DIR}
     ${LEVELDB_ROOT_DIR}/include
     ${LEVELDB_ROOT_DIR}/helpers
