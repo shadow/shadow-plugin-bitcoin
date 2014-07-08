@@ -1,9 +1,9 @@
 #===================================================================
 # Check Bitcoin Dependencies
 #===================================================================
-
+find_package(RT REQUIRED)
+find_package(DL REQUIRED)
 find_package(GLIB REQUIRED)
-include_directories(${GLIB_INCLUDES})
 
 # threads - set options BEFORE find_package()
 set(CMAKE_THREAD_PREFER_PTHREAD ON)  
@@ -41,7 +41,8 @@ message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
 # boost
 #===================================================================
 
-set(BOOST_ROOT_DIR ${CMAKE_BINARY_DIR}/boost_1_50_0)
+set(BOOST_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/boost_1_50_0)
+message(STATUS "BOOST_ROOT_DIR = ${BOOST_ROOT_DIR}")
 
 set(boost_sources
     ${BOOST_ROOT_DIR}/libs/chrono/src/chrono.cpp
@@ -70,7 +71,7 @@ set(boost_sources
     ${BOOST_ROOT_DIR}/libs/program_options/src/variables_map.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/value_semantic.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/positional_options.cpp
-    ${BOOST_ROOT_DIR}/libs/program_options/src/utf8_codecvt_facet.cpp
+#    ${BOOST_ROOT_DIR}/libs/program_options/src/utf8_codecvt_facet.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/convert.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/winmain.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
@@ -81,7 +82,8 @@ set(boost_sources
 #===================================================================
 
 #get_filename_component(BITCOIN_ROOT_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
-set(BITCOIN_ROOT_DIR ${CMAKE_BINARY_DIR}/bitcoin)
+set(BITCOIN_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/bitcoin)
+message(STATUS "BITCOIN_ROOT_DIR = ${BITCOIN_ROOT_DIR}")
 
 #aux_source_directory(${BITCOIN_ROOT_DIR}/src bitcoin_sources)
 #list(REMOVE_ITEM bitcoin_sources
@@ -135,6 +137,7 @@ set(bitcoin_sources
 #===================================================================
 
 set(LEVELDB_ROOT_DIR ${BITCOIN_ROOT_DIR}/src/leveldb)
+message(STATUS "LEVELDB_ROOT_DIR = ${LEVELDB_ROOT_DIR}")
 
 aux_source_directory(${LEVELDB_ROOT_DIR}/db leveldb_db_sources)
 aux_source_directory(${LEVELDB_ROOT_DIR}/util leveldb_util_sources)
@@ -170,7 +173,9 @@ list(REMOVE_ITEM leveldb_sources
 # pth
 #===================================================================
 
-set(PTH_ROOT_DIR ${CMAKE_BINARY_DIR}/gnu-pth)
+set(PTH_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/gnu-pth)
+message(STATUS "PTH_ROOT_DIR = ${PTH_ROOT_DIR}")
+
 include_directories(${PTH_ROOT_DIR})
 
 set(PTH_SOURCES
@@ -246,16 +251,16 @@ add_definitions( "-DLEVELDB_PLATFORM_POSIX" )
 # includes
 #===================================================================
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/src
+    ${BOOST_ROOT_DIR}
+    ${PTH_ROOT_DIR}
     ${BITCOIN_ROOT_DIR}/src
     ${LEVELDB_ROOT_DIR}
     ${LEVELDB_ROOT_DIR}/include
     ${LEVELDB_ROOT_DIR}/helpers
     ${LEVELDB_ROOT_DIR}/helpers/memenv
-    ${PTH_ROOT_DIR}
-    ${BOOST_ROOT_DIR}
 )
-include_directories(AFTER ${OPENSSL_INCLUDE_DIR})
+include_directories(AFTER ${OPENSSL_INCLUDE_DIR} ${RT_INCLUDES} ${DL_INCLUDES} ${GLIB_INCLUDES})
 
 #===================================================================
 # build bitcode and plugins!
@@ -273,14 +278,13 @@ add_bitcode(shadow-plugin-bitcoind-bitcode
 )
 add_plugin(shadow-plugin-bitcoind 
     shadow-plugin-bitcoind-bitcode
-    shadow-pth-bitcode
-    shadow-bitcoin-bitcode
-    shadow-leveldb-bitcode
     shadow-boost-bitcode
+    shadow-pth-bitcode
+    shadow-leveldb-bitcode
+    shadow-bitcoin-bitcode
 )
 target_link_libraries(shadow-plugin-bitcoind 
-    ${CMAKE_THREAD_LIBS_INIT}
-    ${OPENSSL_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 
@@ -292,18 +296,20 @@ add_bitcode(shadow-plugin-bitcoincli-bitcode
 )
 add_plugin(shadow-plugin-bitcoincli 
     shadow-plugin-bitcoincli-bitcode
-    shadow-bitcoin-bitcode
-    shadow-leveldb-bitcode
     shadow-boost-bitcode
+    shadow-leveldb-bitcode
+    shadow-bitcoin-bitcode
 )
 target_link_libraries(shadow-plugin-bitcoincli 
-    ${CMAKE_THREAD_LIBS_INIT}
-    ${OPENSSL_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
 install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
 
 
 ## preload library for intercepting functions
 add_library(shadow-preload-bitcoind SHARED bitcoind/bitcoind-preload.c bitcoind/bitcoind-preload.cpp)
-target_link_libraries(shadow-preload-bitcoind ${GLIB_LIBRARIES} ${DL_LIBRARIES} ${OPENSSL_LIBRARIES})
+target_link_libraries(shadow-preload-bitcoind
+    ${GLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
+)
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)
+

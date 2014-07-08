@@ -52,6 +52,7 @@ wget http://downloads.sourceforge.net/project/boost/boost/1.50.0/boost_1_50_0.ta
 tar xaf boost_1_50_0.tar.gz
 cd boost_1_50_0
 ./bootstrap.sh --with-libraries=filesystem,system,thread,program_options
+./b2
 cd ..
 ```
 
