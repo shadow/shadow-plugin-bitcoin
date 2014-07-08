@@ -1,3 +1,6 @@
+# Notes for "with-pth" development branch:
+- use this version of shadow: https://github.com/amiller/shadow/next
+
 # shadow-plugin-bitcoin
 
 Shadow plugin for bitcoind (the Satoshi reference client)
