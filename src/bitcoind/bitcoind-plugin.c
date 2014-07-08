@@ -11,6 +11,15 @@ ShadowFunctionTable shadowlib;
 /* our opaque instance of the hello node */
 //BitcoinD* bcdNodeInstance = NULL;
 
+/* Log function for Bitcoin */
+typedef int (*bitcoind_logprintstr_fp)(const char*);
+int CLogPrintStr(const char *s) {
+  real_fprintf("%s", s);
+  //bitcoindpreload_setContext(EXECTX_SHADOW);
+  //	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "%s", s);
+  //	bitcoindpreload_setContext(EXECTX_PLUGIN);
+	return 0;
+}
 
 static int main_epd = -1;
 
@@ -55,6 +64,11 @@ static int _timeval_subtract (result, x, y)
 /* shadow is notifying us that some descriptors are ready to read/write */
 static void bitcoindplugin_ready() {
 	bitcoindpreload_setContext(EXECTX_SHADOW);
+
+	struct timeval tv;
+	struct timezone tz;
+	gettimeofday(&tv, &tz);
+	printf("GetTimeOfday:%ld tv_sec\n", tv.tv_sec);
     
 	static int epd = -1;
 	struct epoll_event ev = {};
@@ -128,6 +142,7 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
+	init_tls();
 	bitcoindpreload_setContext(EXECTX_PTH);
 	pth_init();
 

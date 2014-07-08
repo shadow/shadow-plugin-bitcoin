@@ -32,15 +32,20 @@
     </topology>
 
     <!-- the plug-ins we will be using -->
-	<plugin id="bitcoind" path="libshadow-plugin-bitcoind.so" />
-	<!--<plugin id="bitcoincli" path="libshadow-plugin-bitcoincli.so" />-->
+    <plugin id="bitcoind1" path="libshadow-plugin-bitcoind.so" />
+    <plugin id="bitcoind2" path="libshadow-plugin-bitcoind.so" />
+    <!--<plugin id="bitcoincli" path="libshadow-plugin-bitcoincli.so" />-->
 
-    <!-- the length of our experiment in seconds -->
+    <!-- the length of our experiment in seconds  1404101800-->
     <kill time="1800" />
 
     <!-- our nodes -->
-    <node id="bcdnode">
-        <application plugin="bitcoind" time="13" arguments="NULL" />
+    <node id="bcdnode1">
+        <application plugin="bitcoind1" time="13" arguments="-datadir=/home/amiller/.bitcoin -debug -printtoconsole -connect=bcdnode2 -listen -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
+    </node>
+
+    <node id="bcdnode2">
+        <application plugin="bitcoind2" time="13" arguments="-datadir=/home/amiller/.bitcoin2 -debug -printtoconsole -connect= -listen -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
     </node>
     <!--
     <node id="bccnode">

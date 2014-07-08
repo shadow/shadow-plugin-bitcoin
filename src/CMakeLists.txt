@@ -22,6 +22,9 @@ message(STATUS "CMAKE_USE_PTHREADS_INIT = ${CMAKE_USE_PTHREADS_INIT}")
 message(STATUS "CMAKE_THREAD_LIBS_INIT = ${CMAKE_THREAD_LIBS_INIT}")
 
 # boost - set options BEFORE find_package()
+set(BOOST_INCLUDEDIR /home/amiller/.local/include)
+set(BOOST_LIBRARYDIR /home/amiller/.local/lib)
+set(Boost_NO_SYSTEM_PATHS ON) 
 set(Boost_USE_STATIC_LIBS OFF) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF)
@@ -163,7 +166,7 @@ ADD_CUSTOM_COMMAND (
    OUTPUT ${PTH_ROOT_DIR}/pth_p.h
    COMMAND ${PTH_ROOT_DIR}/shtool 
    ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
-   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_ROOT_DIR}/*.h ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
 )
 #ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
 #set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS pth_p.h)
@@ -183,6 +186,7 @@ add_definitions( "-DHAS_BOOST -DHAVE_WORKING_BOOST_SLEEP" )
 add_definitions( "-DHAVE_CONFIG_H" )
 
 # needed so we include the correct port header for posix
+add_definitions( "-DLEVELDB_PLATFORM_POSIX" )
 add_definitions( "-DLEVELDB_PLATFORM_POSIX" )
 
 #===================================================================
@@ -244,6 +248,6 @@ install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
 
 
 ## preload library for intercepting functions
-add_library(shadow-preload-bitcoind SHARED bitcoind/bitcoind-preload.c)
-target_link_libraries(shadow-preload-bitcoind ${GLIB_LIBRARIES} ${DL_LIBRARIES})
+add_library(shadow-preload-bitcoind SHARED bitcoind/bitcoind-preload.c bitcoind/bitcoind-preload.cpp)
+target_link_libraries(shadow-preload-bitcoind ${GLIB_LIBRARIES} ${DL_LIBRARIES} ${OPENSSL_LIBRARIES})
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)

@@ -17,6 +17,9 @@ endif()
 macro(add_cflags)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ARGN}")
 endmacro(add_cflags)
+macro(add_cxxflags)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ARGN}")
+endmacro(add_cxxflags)
 
 ## now handle the options, set up our own flags
 set(CMAKE_C_FLAGS_DEBUG "")
@@ -25,11 +28,13 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Release")
     message(STATUS "Release enabled. Setting '-DNDEBUG' and '-O3'.")
     add_definitions(-DNDEBUG)
     add_cflags(-O3)
+    add_cxxflags(-O3)
 else()
     set(CMAKE_BUILD_TYPE "Debug")
     message(STATUS "Debug enabled. Setting '-DDEBUG' and '-g'.")
     add_definitions(-DDEBUG)
     add_cflags(-g)
+    add_cxxflags(-g)
 endif()
 
 ## get general includes
