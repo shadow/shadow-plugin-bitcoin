@@ -145,7 +145,6 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
-	init_tls();
 	bitcoindpreload_setContext(EXECTX_PTH);
 	pth_init();
 

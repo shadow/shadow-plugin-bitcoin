@@ -56,15 +56,6 @@ cd boost_1_50_0
 cd ..
 ```
 
-### gnu pth
-
-```bash
-git clone git@github.com:amiller/gnu-pth.git
-cd gnu-pth
-git checkout -b shadow
-cd ..
-```
-
 ### bitcoin
 
 We need to get the bitcoin source so we can compile it into our Shadow plug-in, and then configure it to obtain a proper `bitcoin-config.h` file.
@@ -73,11 +64,20 @@ We need to get the bitcoin source so we can compile it into our Shadow plug-in, 
 git clone https://github.com/bitcoin/bitcoin.git
 cd bitcoin
 ./autogen.sh
-PKG_CONFIG_PATH=/home/${USER}/.shadow/lib/pkgconfig LDFLAGS=-L/home/${USER}/.shadow/lib CFLAGS=-I/home/${USER}/.shadow/include ./configure --prefix=/home/${USER}/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests
+PKG_CONFIG_PATH=/home/${USER}/.shadow/lib/pkgconfig LDFLAGS=-L/home/${USER}/.shadow/lib CFLAGS=-I/home/${USER}/.shadow/include CXXFLAGS=-I`pwd`/../boost_1_50_0 ./configure --prefix=/home/${USER}/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests --with-boost-libdir=`pwd`/../boost_1_50_0/stage/lib
 cd ..
 ```
 
 Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify the install path of our custom-built OpenSSL.
+
+### gnu pth
+
+```bash
+git clone git@github.com:amiller/gnu-pth.git
+cd gnu-pth
+git checkout -b shadow
+cd ..
+```
 
 ### shadow-plugin-bitcoin
 
