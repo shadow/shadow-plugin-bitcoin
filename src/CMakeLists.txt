@@ -44,6 +44,9 @@ message(STATUS "OPENSSL_LIBRARIES = ${OPENSSL_LIBRARIES}")
 set(BOOST_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/boost_1_50_0)
 message(STATUS "BOOST_ROOT_DIR = ${BOOST_ROOT_DIR}")
 
+ADD_CUSTOM_COMMAND( OUTPUT ${BOOST_ROOT_DIR}/libs/program_options/src/program_options_utf8_codecvt_facet.cpp
+                     COMMAND ln -s ${BOOST_ROOT_DIR}/libs/program_options/src/utf8_codecvt_facet.cpp ${BOOST_ROOT_DIR}/libs/program_options/src/program_options_utf8_codecvt_facet.cpp )
+
 set(boost_sources
     ${BOOST_ROOT_DIR}/libs/chrono/src/chrono.cpp
     ${BOOST_ROOT_DIR}/libs/chrono/src/thread_clock.cpp
@@ -71,7 +74,7 @@ set(boost_sources
     ${BOOST_ROOT_DIR}/libs/program_options/src/variables_map.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/value_semantic.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/positional_options.cpp
-#    ${BOOST_ROOT_DIR}/libs/program_options/src/utf8_codecvt_facet.cpp
+    ${BOOST_ROOT_DIR}/libs/program_options/src/program_options_utf8_codecvt_facet.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/convert.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/winmain.cpp
     ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
@@ -212,7 +215,7 @@ ADD_CUSTOM_COMMAND (
    ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
    DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_ROOT_DIR}/*.h ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
 )
-#ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
+ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in)
 #set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS pth_p.h)
 add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
 add_dependencies(shadow-pth-bitcode generate_pth)

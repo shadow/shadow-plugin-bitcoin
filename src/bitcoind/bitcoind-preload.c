@@ -544,7 +544,16 @@ ssize_t real_fprintf(FILE *stream, const char *format, ...) {
 	}
 }
 
-
+int shd_dl_gettimeofday(struct timeval *tv, struct timezone *tz) {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	assert(worker);
+	ExecutionContext e = worker->activeContext;
+	worker->activeContext = EXECTX_PTH;
+	int rc = gettimeofday(tv, tz);
+	worker->activeContext = e;
+	tv->tv_sec += 1404101800;
+	return rc;
+}
 ssize_t shd_dl_read(int fp, void *d, size_t s) _SHD_DL_BODY(read, fp, d, s);
 ssize_t shd_dl_write(int fp, const void *d, size_t s) {
   _SHD_DL_BODY(write, fp, d, s);
@@ -1219,7 +1228,7 @@ void* mmap(void *addr, size_t length, int prot, int flags,
 int pth_shadow_enter() {
 	BitcoindPreloadWorker* worker = pluginWorkerKey;
 	assert(worker);
-	real_fprintf(stderr, "pth_shadow_enter:%d\n", worker->activeContext);
+	//real_fprintf(stderr, "pth_shadow_enter:%d\n", worker->activeContext);
 	worker->activeContext = EXECTX_PLUGIN;
 	return worker->activeContext;
 	
@@ -1227,7 +1236,7 @@ int pth_shadow_enter() {
 void pth_shadow_leave(int ctx) {
 	BitcoindPreloadWorker* worker = pluginWorkerKey;
 	assert(worker);
-	real_fprintf(stderr, "pth_shadow_leave:%d\n", worker->activeContext);
+	//real_fprintf(stderr, "pth_shadow_leave:%d\n", worker->activeContext);
 	worker->activeContext = ctx;
 }
 

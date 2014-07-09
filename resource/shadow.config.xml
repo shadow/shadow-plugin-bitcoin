@@ -41,11 +41,11 @@
 
     <!-- our nodes -->
     <node id="bcdnode1">
-        <application plugin="bitcoind1" time="13" arguments="-datadir=/home/amiller/.bitcoin -debug -printtoconsole -connect=bcdnode2 -listen -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
+        <application plugin="bitcoind1" time="13" arguments="-datadir=/home/amiller/.bitcoin -debug -printtoconsole -connect=bcdnode2 -listen -par=1 -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
     </node>
 
     <node id="bcdnode2">
-        <application plugin="bitcoind2" time="13" arguments="-datadir=/home/amiller/.bitcoin2 -debug -printtoconsole -connect= -listen -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
+        <application plugin="bitcoind1" time="13" arguments="-datadir=/home/amiller/.bitcoin2 -debug -printtoconsole -listen -connect=bcdnode1 -par=1 -server=0 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1" />
     </node>
     <!--
     <node id="bccnode">

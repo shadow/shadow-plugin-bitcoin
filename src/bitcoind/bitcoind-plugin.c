@@ -14,11 +14,11 @@ ShadowFunctionTable shadowlib;
 /* Log function for Bitcoin */
 typedef int (*bitcoind_logprintstr_fp)(const char*);
 int CLogPrintStr(const char *s) {
-  real_fprintf("%s", s);
-  //bitcoindpreload_setContext(EXECTX_SHADOW);
-  //	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "%s", s);
-  //	bitcoindpreload_setContext(EXECTX_PLUGIN);
-	return 0;
+  //real_fprintf(stderr, "%s", s);
+  bitcoindpreload_setContext(EXECTX_SHADOW);
+  shadowlib.log(SHADOW_LOG_LEVEL_INFO, __FUNCTION__, "%s", s);
+  bitcoindpreload_setContext(EXECTX_PLUGIN);
+  return 0;
 }
 
 static int main_epd = -1;
@@ -68,11 +68,10 @@ static void bitcoindplugin_ready() {
 	struct timeval tv;
 	struct timezone tz;
 	gettimeofday(&tv, &tz);
-	printf("GetTimeOfday:%ld tv_sec\n", tv.tv_sec);
     
 	static int epd = -1;
 	struct epoll_event ev = {};
-	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master activated");
+	//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master activated");
 
 	epoll_wait(epd, &ev, 1, 0); // try to consume an event
 
@@ -100,18 +99,22 @@ static void bitcoindplugin_ready() {
 		ev.data.fd = epd;
 		epoll_ctl(main_epd, EPOLL_CTL_ADD, epd, &ev);
 	}
-	shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master exiting");
+	//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Master exiting");
 
 	/* Figure out when the next timer would be */
 	struct timeval timeout = pth_waiting_timeout();
 	if (!(timeout.tv_sec == 0 && timeout.tv_usec == 0)) {
 		struct timeval now, delay;
+		bitcoindpreload_setContext(EXECTX_PLUGIN);
 		gettimeofday(&now, NULL);
+		bitcoindpreload_setContext(EXECTX_SHADOW);
 		uint ms;
 		if (_timeval_subtract(&delay, &timeout, &now)) ms = 0;
 		else ms = 1 + delay.tv_sec*1000 + (delay.tv_usec+1)/1000;
-
-		shadowlib.log(SHADOW_LOG_LEVEL_DEBUG, __FUNCTION__, "Registering a callback for %d ms", ms);
+		//assert delay.tv_sec >= 0;
+		assert(ms > 0);
+		//pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
+		//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Registering a callback for %u ms", ms);
 		shadowlib.createCallback((ShadowPluginCallbackFunc) bitcoindplugin_ready, NULL, ms);
 	}
 }
