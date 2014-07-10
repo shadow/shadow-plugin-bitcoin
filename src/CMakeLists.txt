@@ -81,6 +81,45 @@ set(boost_sources
 )
 
 #===================================================================
+# picocoin
+#===================================================================
+set(picocoin_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/picocoin)
+include_directories(${picocoin_ROOT_DIR}/ ${picocoin_ROOT_DIR}/include ${GLIB_INCLUDES})
+set(picocoin_SOURCES
+	${picocoin_ROOT_DIR}/lib/address.c
+	${picocoin_ROOT_DIR}/lib/addr_match.c
+	${picocoin_ROOT_DIR}/lib/base58.c
+	${picocoin_ROOT_DIR}/lib/bignum.c
+	${picocoin_ROOT_DIR}/lib/blkdb.c
+	${picocoin_ROOT_DIR}/lib/block.c
+	${picocoin_ROOT_DIR}/lib/blockfile.c
+	${picocoin_ROOT_DIR}/lib/bloom.c
+	${picocoin_ROOT_DIR}/lib/buffer.c
+	${picocoin_ROOT_DIR}/lib/buint.c
+	${picocoin_ROOT_DIR}/lib/checkpoints.c
+	${picocoin_ROOT_DIR}/lib/core.c
+	${picocoin_ROOT_DIR}/lib/coredefs.c
+	${picocoin_ROOT_DIR}/lib/dns.c
+	${picocoin_ROOT_DIR}/lib/file_seq.c
+	${picocoin_ROOT_DIR}/lib/hexcode.c
+	${picocoin_ROOT_DIR}/lib/key.c
+	${picocoin_ROOT_DIR}/lib/keyset.c
+	${picocoin_ROOT_DIR}/lib/keystore.c
+	${picocoin_ROOT_DIR}/lib/mbr.c
+	${picocoin_ROOT_DIR}/lib/memmem.c
+	${picocoin_ROOT_DIR}/lib/message.c
+	${picocoin_ROOT_DIR}/lib/net.c
+	${picocoin_ROOT_DIR}/lib/script.c
+	${picocoin_ROOT_DIR}/lib/script_eval.c
+	${picocoin_ROOT_DIR}/lib/script_names.c
+	${picocoin_ROOT_DIR}/lib/script_sign.c
+	${picocoin_ROOT_DIR}/lib/serialize.c
+	${picocoin_ROOT_DIR}/lib/util.c
+	${picocoin_ROOT_DIR}/lib/utxo.c
+)
+add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
+
+#===================================================================
 # bitcoin
 #===================================================================
 
@@ -292,22 +331,38 @@ target_link_libraries(shadow-plugin-bitcoind
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 
-# bitcoincli plugin
-add_bitcode(shadow-plugin-bitcoincli-bitcode 
-    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
-    bitcoincli/bitcoincli-plugin.c
-    bitcoincli/bitcoincli.c
+
+# injector plugin
+add_bitcode(shadow-plugin-bitcoin-injector-bitcode
+    injector/injector-plugin.c
+    injector/injector.c
 )
-add_plugin(shadow-plugin-bitcoincli 
-    shadow-plugin-bitcoincli-bitcode
-    shadow-boost-bitcode
-    shadow-leveldb-bitcode
-    shadow-bitcoin-bitcode
+add_plugin(shadow-plugin-bitcoin-injector
+    shadow-plugin-bitcoin-injector-bitcode
+    shadow-picocoin-bitcode
+    shadow-pth-bitcode
 )
-target_link_libraries(shadow-plugin-bitcoincli 
+target_link_libraries(shadow-plugin-bitcoin-injector
     ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
-install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
+install(TARGETS shadow-plugin-bitcoin-injector DESTINATION plugins)
+
+# bitcoincli plugin
+#add_bitcode(shadow-plugin-bitcoincli-bitcode 
+#    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
+#    bitcoincli/bitcoincli-plugin.c
+#    bitcoincli/bitcoincli.c
+#)
+#add_plugin(shadow-plugin-bitcoincli 
+#    shadow-plugin-bitcoincli-bitcode
+#    shadow-boost-bitcode
+#    shadow-leveldb-bitcode
+#    shadow-bitcoin-bitcode
+#)
+#target_link_libraries(shadow-plugin-bitcoincli 
+#    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
+#)
+#install(TARGETS shadow-plugin-bitcoincli DESTINATION plugins)
 
 
 ## preload library for intercepting functions

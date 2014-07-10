@@ -79,6 +79,17 @@ git checkout -b shadow
 cd ..
 ```
 
+### picocoin
+
+FIXME: Might require jannson too
+
+```bash
+git clone git@github.com:jgarzik/picocoin.git
+cd picocoin
+./autogen.sh
+./configure
+```
+
 ### shadow-plugin-bitcoin
 
 Now we are ready to build the actual Shadow plug-in using cmake.
