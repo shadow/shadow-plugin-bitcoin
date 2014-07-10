@@ -3,6 +3,9 @@
  */
 
 #include "bitcoind.h"
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/bn.h>
 #include <pth.h>
 
 /* functions that interface into shadow */
@@ -10,18 +13,43 @@ ShadowFunctionTable shadowlib;
 
 /* our opaque instance of the hello node */
 //BitcoinD* bcdNodeInstance = NULL;
+static GList* cxa_atexit_queue = NULL;
+
+#define ACTIVE_PLUGIN PLUGIN_BITCOIND
 
 /* Log function for Bitcoin */
 typedef int (*bitcoind_logprintstr_fp)(const char*);
 int CLogPrintStr(const char *s) {
   //real_fprintf(stderr, "%s", s);
-  bitcoindpreload_setContext(EXECTX_SHADOW);
-  shadowlib.log(SHADOW_LOG_LEVEL_INFO, __FUNCTION__, "%s", s);
-  bitcoindpreload_setContext(EXECTX_PLUGIN);
+  uint len = strlen(s);
+  if (!len) return 0;
+  char *buf = malloc(strlen(s));
+  strncpy(buf, s, len);
+  if (buf[len-1] == '\n') buf[len-1] = '\0';
+  bitcoindpreload_setShadowContext();
+  shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "%s", buf);
+  bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
+  free(buf);
   return 0;
 }
 
 static int main_epd = -1;
+
+void _plugin_ctors() { }
+void _plugin_dtors() { }
+
+struct exit_node { void (*f)(void*); void *arg; void *dso_handle; };
+
+int bitcoindplugin_cxa_atexit(void (*f)(void*), void *arg, void *dso_handle) {
+	//assert(!arg);
+	//assert(!dso_handle);
+	struct exit_node *node = malloc(sizeof(struct exit_node));
+	node->f = f;
+	node->arg = arg;
+	node->dso_handle = dso_handle;
+	cxa_atexit_queue = g_list_prepend(cxa_atexit_queue, node);
+	return 0;
+}
 
 
 /* shadow is freeing an existing instance of this plug-in that we previously
@@ -31,6 +59,18 @@ static void bitcoindplugin_free() {
 	/* shadow wants to free a node. pass this to the lower level
 	 * plug-in function that implements this for both plug-in and non-plug-in modes.
 	 */
+	// Call all the destructors
+	GList *list = cxa_atexit_queue;
+	while (list) {
+		struct exit_node *node = list->data;
+		bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
+		//node->f(node->arg);
+		bitcoindpreload_setShadowContext();
+		free(node);
+		list = g_list_next(list);
+	}
+	g_list_free(list);
+	cxa_atexit_queue = NULL;
 }
 
 /* Subtract the `struct timeval' values X and Y,
@@ -63,7 +103,7 @@ static int _timeval_subtract (result, x, y)
 
 /* shadow is notifying us that some descriptors are ready to read/write */
 static void bitcoindplugin_ready() {
-	bitcoindpreload_setContext(EXECTX_SHADOW);
+	bitcoindpreload_setShadowContext();
 
 	struct timeval tv;
 	struct timezone tz;
@@ -83,16 +123,16 @@ static void bitcoindplugin_ready() {
 	ev.events = EPOLLOUT | EPOLLIN | EPOLLRDHUP;
 
 	pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
-	bitcoindpreload_setContext(EXECTX_PLUGIN);
+	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 	pth_yield(NULL); // go visit the scheduler at least once
-	bitcoindpreload_setContext(EXECTX_SHADOW);
+	bitcoindpreload_setShadowContext();
 
 	while (pth_ctrl(PTH_CTRL_GETTHREADS_READY | PTH_CTRL_GETTHREADS_NEW)) {
 		//pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
 		pth_attr_set(pth_attr_of(pth_self()), PTH_ATTR_PRIO, PTH_PRIO_MIN);
-		bitcoindpreload_setContext(EXECTX_PLUGIN);
+		bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 		pth_yield(NULL);
-		bitcoindpreload_setContext(EXECTX_SHADOW);
+		bitcoindpreload_setShadowContext();
 	}
 	epd = pth_waiting_epoll();
 	if (epd > -1) {
@@ -105,9 +145,9 @@ static void bitcoindplugin_ready() {
 	struct timeval timeout = pth_waiting_timeout();
 	if (!(timeout.tv_sec == 0 && timeout.tv_usec == 0)) {
 		struct timeval now, delay;
-		bitcoindpreload_setContext(EXECTX_PLUGIN);
+		bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 		gettimeofday(&now, NULL);
-		bitcoindpreload_setContext(EXECTX_SHADOW);
+		bitcoindpreload_setShadowContext();
 		uint ms;
 		if (_timeval_subtract(&delay, &timeout, &now)) ms = 0;
 		else ms = 1 + delay.tv_sec*1000 + (delay.tv_usec+1)/1000;
@@ -145,18 +185,22 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	 * we did not set it in __shadow_plugin_init__(). this is desirable, because
 	 * each node needs its own application state.
 	 */
-	bitcoindpreload_setContext(EXECTX_PTH);
+	bitcoindpreload_setPthContext();
 	pth_init();
 
+	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
+	_plugin_ctors();
+
+	bitcoindpreload_setPthContext();
 	//helloNodeInstance = hello_new(argc, argv, shadowlib.log);
 	struct args_t args = {argc, argv, shadowlib.log};
 	pth_t t = pth_spawn(PTH_ATTR_DEFAULT, (void *(*)(void*))&_bitcoind_new, &args);
-	bitcoindpreload_setContext(EXECTX_PLUGIN);
+	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 
 	// Jog the threads once
 	bitcoindplugin_ready();
 
-	bitcoindpreload_setContext(EXECTX_SHADOW);
+	bitcoindpreload_setShadowContext();
 }
 
 /* plug-in initialization. this only happens once per plug-in,
@@ -177,7 +221,7 @@ void __shadow_plugin_init__(ShadowFunctionTable* shadowlibFuncs) {
 	 * tell shadow how to call us back when creating/freeing nodes, and
 	 * where to call to notify us when there is descriptor I/O
 	 */
-	bitcoindpreload_setContext(EXECTX_SHADOW);
+	bitcoindpreload_setShadowContext();
 	int success = shadowlib.registerPlugin(&bitcoindplugin_new, &bitcoindplugin_free, &bitcoindplugin_ready);
 
 	/* we log through Shadow by using the log function it supplied to us */
@@ -194,13 +238,43 @@ void __shadow_plugin_init__(ShadowFunctionTable* shadowlibFuncs) {
  * each worker thread. the GModule* is needed as a handle for g_module_symbol()
  * symbol lookups.
  * return NULL for success, or a string describing the error */
+
+typedef void (*CRYPTO_lock_func)(int, int, const char*, int);
+typedef unsigned long (*CRYPTO_id_func)(void);
+
 const gchar* g_module_check_init(GModule *module) {
 	/* clear our memory before initializing */
 	//memset(&scallion, 0, sizeof(Scallion));
 	fprintf(stderr, "gmodule init bitcoind\n");
 	/* do all the symbol lookups we will need now, and init our thread-specific
 	 * library of intercepted functions. */
-	bitcoindpreload_init(module);
+
+#define OPENSSL_THREAD_DEFINES
+#include <openssl/opensslconf.h>
+#if defined(OPENSSL_THREADS)
+	/* thread support enabled, how many locks does openssl want */
+	int nLocks = CRYPTO_num_locks();
+
+	/* do all the symbol lookups we will need now, and init thread-specific
+	 * library of intercepted functions, init our global openssl locks. */
+	bitcoindpreload_init(module, nLocks);
+
+	/* make sure openssl uses Shadow's random sources and make crypto thread-safe
+	 * get function pointers through LD_PRELOAD */
+	const RAND_METHOD* shadowtor_randomMethod = RAND_get_rand_method();
+	CRYPTO_lock_func shadowtor_lockFunc = CRYPTO_get_locking_callback();
+	CRYPTO_id_func shadowtor_idFunc = CRYPTO_get_id_callback();
+
+	CRYPTO_set_locking_callback(shadowtor_lockFunc);
+	CRYPTO_set_id_callback(shadowtor_idFunc);
+	RAND_set_rand_method(shadowtor_randomMethod);
+
+	//.opensslThreadSupport = 1;
+#else
+	/* no thread support */
+	//nodeinstance.opensslThreadSupport = 0;
+#endif
+
 	fprintf(stderr, "check_init done\n");
 
 	return NULL;

@@ -15,11 +15,15 @@
 #include <execinfo.h>
 #include <sys/socket.h>
 #include <sys/poll.h>
-
+#include <openssl/crypto.h>
+#include <errno.h>
+#include <assert.h>
 #include <glib.h>
 #include <gmodule.h>
 
-#include "bitcoind.h"
+#include "bitcoind-preload.h"
+//#include "bitcoind.h"
+
 
 #include "pth.h"
 
@@ -48,6 +52,7 @@ typedef ssize_t (*recv_fp)(int, void *, size_t, int);
 typedef ssize_t (*send_fp)(int, const void *, size_t, int);
 typedef ssize_t (*recvfrom_fp)(int, void *, size_t, int, struct sockaddr *, socklen_t *);
 typedef ssize_t (*sendto_fp)(int, const void *, size_t, int, const struct sockaddr *, socklen_t);
+typedef int (*__cxa_atexit_fp)(void (*f)(void*), void *arg, void *dso_handle);
 
 /* socket/io family */
 typedef int (*socket_fp)(int, int, int);
@@ -106,6 +111,7 @@ typedef int (*srandom_r_fp)(unsigned int seed, struct random_data *buf);
 /* crypto family */
 typedef void* (*CRYPTO_get_locking_callback_fp)();
 typedef void* (*CRYPTO_get_id_callback_fp)();
+typedef int (*SSL_library_init_fp)();
 typedef void (*RAND_seed_fp)(const void *buf, int num);
 typedef void (*RAND_add_fp)(const void *buf, int num, double entropy);
 typedef int (*RAND_poll_fp)();
@@ -114,6 +120,7 @@ typedef int (*RAND_pseudo_bytes_fp)(unsigned char *buf, int num);
 typedef void (*RAND_cleanup_fp)();
 typedef int (*RAND_status_fp)();
 typedef const void *(*RAND_get_rand_method_fp)();
+typedef const void *(*RAND_SSLeay_fp)();
 
 
 /* file specific */
@@ -139,6 +146,8 @@ typedef int (*fsync_fp)(int fd);
 
 
 /* name/address family */
+struct addrinfo;
+struct hostent;
 typedef int (*gethostname_fp)(char*, size_t);
 typedef int (*getaddrinfo_fp)(const char*, const char*, const struct addrinfo*, struct addrinfo**);
 typedef int (*freeaddrinfo_fp)(struct addrinfo*);
@@ -150,22 +159,13 @@ typedef int (*gethostbyname2_r_fp)(const char*, int, struct hostent *, char *, s
 typedef struct hostent* (*gethostbyaddr_fp)(const void*, socklen_t, int);
 typedef int (*gethostbyaddr_r_fp)(const void*, socklen_t, int, struct hostent*, char*, size_t, struct hostent **, int*);
 
-/* random family */
-/*
-typedef int (*RandFunc)();
-typedef int (*RandRFunc)(unsigned int*);
-typedef void (*SrandFunc)(unsigned int);
-typedef long int (*RandomFunc)(void);
-typedef int (*RandomRFunc)(struct random_data*, int32_t*);
-typedef void (*SrandomFunc)(unsigned int);
-typedef int (*SrandomRFunc)(unsigned int, struct random_data*);
-*/
 
 /* pth */
 typedef ssize_t (*pth_read_fp)(int, void*, size_t);
 typedef ssize_t (*pth_write_fp)(int, const void*, size_t);
 typedef int (*pth_nanosleep_fp)(const struct timespec *, struct timespec *);
 typedef int (*pth_usleep_fp)(unsigned int);
+typedef long (*pth_ctrl_fp)(unsigned long, ...);
 typedef unsigned int  (*pth_sleep_fp)(unsigned int);
 typedef void (*pth_init_fp)(void);
 typedef pth_t (*pth_spawn_fp)(pth_attr_t attr, void *(*func)(void *), void *arg);
@@ -188,8 +188,21 @@ typedef pth_event_t (*pth_event_fp)(unsigned long, ...);
 typedef pth_status_t (*pth_event_status_fp)(pth_event_t);
 typedef int (*pth_util_select_fp)(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 typedef int (*pth_select_fp)(int, fd_set *, fd_set *, fd_set *, struct timeval *);
+typedef ssize_t (*pth_readv_fp)(int, const struct iovec *, int);
+typedef ssize_t (*pth_writev_fp)(int, const struct iovec *, int);
+typedef ssize_t (*pth_pread_fp)(int, void *, size_t, off_t);
+typedef ssize_t (*pth_pwrite_fp)(int, const void *, size_t, off_t);
+typedef ssize_t (*pth_recv_fp)(int, void *, size_t, int);
+typedef ssize_t (*pth_send_fp)(int, const void *, size_t, int);
+typedef ssize_t (*pth_recvfrom_fp)(int, void *, size_t, int, struct sockaddr *, socklen_t *);
+typedef ssize_t (*pth_sendto_fp)(int, const void *, size_t, int, const struct sockaddr *, socklen_t);
+typedef int (*pth_connect_fp)(int, const struct sockaddr *, socklen_t);
+typedef int (*pth_accept_fp)(int, struct sockaddr *, socklen_t *);
+
+
 
 /* epoll */
+struct epoll_event;
 typedef int (*epoll_create_fp)(int);
 typedef int (*epoll_create1_fp)(int flags);
 typedef int (*epoll_ctl_fp)(int epfd, int op, int fd, struct epoll_event *event);
@@ -224,7 +237,8 @@ typedef int (*pthread_mutex_trylock_fp)(pthread_mutex_t*);
 typedef int (*pthread_mutex_unlock_fp)(pthread_mutex_t*);
 
 typedef int (*CLogPrintStr_fp)(const char*);
-
+typedef int (*crypto_global_init_fp)(int, const char*, const char*);
+typedef int (*crypto_global_cleanup_fp)(void);
 
 /* the key used to store each threads version of their searched function library.
  * the use this key to retrieve this library when intercepting functions from tor.
@@ -241,6 +255,51 @@ static __thread unsigned long isRecursive = 0;
 
 #define __FUNC_TABLE_ENTRY(func) func##_fp func
 
+typedef struct _PthTable PthTable;
+struct _PthTable {
+	/* pth */
+	pth_read_fp pth_read;
+	pth_write_fp pth_write;
+	pth_usleep_fp pth_usleep;
+	pth_nanosleep_fp pth_nanosleep;
+	pth_sleep_fp pth_sleep;
+	pth_ctrl_fp pth_ctrl;
+
+	pth_init_fp pth_init;
+	pth_join_fp pth_join;
+	pth_spawn_fp pth_spawn;
+	pth_mutex_init_fp pth_mutex_init;
+	pth_mutex_acquire_fp pth_mutex_acquire;
+	pth_mutex_release_fp pth_mutex_release;
+	pth_cond_init_fp pth_cond_init;
+	pth_cond_await_fp pth_cond_await;
+	pth_cond_notify_fp pth_cond_notify;
+	pth_key_create_fp pth_key_create;
+	pth_key_delete_fp pth_key_delete;
+	pth_key_setdata_fp pth_key_setdata;
+	pth_key_getdata_fp pth_key_getdata;
+
+	pth_attr_of_fp pth_attr_of;
+	pth_attr_set_fp pth_attr_set;
+	pth_attr_destroy_fp pth_attr_destroy;
+	pth_time_fp pth_time;
+	pth_event_fp pth_event;
+	pth_event_status_fp pth_event_status;
+	__FUNC_TABLE_ENTRY(pth_util_select);
+	__FUNC_TABLE_ENTRY(pth_select);
+
+	__FUNC_TABLE_ENTRY(pth_readv);
+	__FUNC_TABLE_ENTRY(pth_writev);
+	__FUNC_TABLE_ENTRY(pth_pread);
+	__FUNC_TABLE_ENTRY(pth_pwrite);
+	__FUNC_TABLE_ENTRY(pth_recv);
+	__FUNC_TABLE_ENTRY(pth_send);
+	__FUNC_TABLE_ENTRY(pth_recvfrom);
+	__FUNC_TABLE_ENTRY(pth_sendto);
+	__FUNC_TABLE_ENTRY(pth_connect);
+	__FUNC_TABLE_ENTRY(pth_accept);
+};
+
 typedef struct _FunctionTable FunctionTable;
 struct _FunctionTable {
 	close_fp close;
@@ -251,6 +310,10 @@ struct _FunctionTable {
 	sleep_fp sleep;
 
 	__FUNC_TABLE_ENTRY(CLogPrintStr);
+
+	/* Crypto global */
+	__FUNC_TABLE_ENTRY(crypto_global_init);
+	__FUNC_TABLE_ENTRY(crypto_global_cleanup);
 
 	/* socket/io family */
 	__FUNC_TABLE_ENTRY(socket);
@@ -276,6 +339,11 @@ struct _FunctionTable {
 	__FUNC_TABLE_ENTRY(pipe);
 	__FUNC_TABLE_ENTRY(pipe2);
 	__FUNC_TABLE_ENTRY(eventfd);
+	__FUNC_TABLE_ENTRY(readv);
+	__FUNC_TABLE_ENTRY(writev);
+	__FUNC_TABLE_ENTRY(pread);
+	__FUNC_TABLE_ENTRY(pwrite);
+
 
 	/* file specific */
 	__FUNC_TABLE_ENTRY(fileno);
@@ -310,6 +378,8 @@ struct _FunctionTable {
 	
 
 	/* memory allocation family */
+	__FUNC_TABLE_ENTRY(__cxa_atexit);
+	__cxa_atexit_fp bitcoindplugin_cxa_atexit;
 	malloc_fp malloc;
 	calloc_fp calloc;
 	realloc_fp realloc;
@@ -345,6 +415,7 @@ struct _FunctionTable {
 	/* crypto family */
 	__FUNC_TABLE_ENTRY(CRYPTO_get_locking_callback);
 	__FUNC_TABLE_ENTRY(CRYPTO_get_id_callback);
+	__FUNC_TABLE_ENTRY(SSL_library_init);
 	__FUNC_TABLE_ENTRY(RAND_seed);
 	__FUNC_TABLE_ENTRY(RAND_add);
 	__FUNC_TABLE_ENTRY(RAND_poll);
@@ -352,37 +423,8 @@ struct _FunctionTable {
 	__FUNC_TABLE_ENTRY(RAND_pseudo_bytes);
 	__FUNC_TABLE_ENTRY(RAND_cleanup);
 	__FUNC_TABLE_ENTRY(RAND_status);
-
-	/* pth */
-	pth_read_fp pth_read;
-	pth_write_fp pth_write;
-	pth_usleep_fp pth_usleep;
-	pth_nanosleep_fp pth_nanosleep;
-	pth_sleep_fp pth_sleep;
-
-	pth_init_fp pth_init;
-	pth_join_fp pth_join;
-	pth_spawn_fp pth_spawn;
-	pth_mutex_init_fp pth_mutex_init;
-	pth_mutex_acquire_fp pth_mutex_acquire;
-	pth_mutex_release_fp pth_mutex_release;
-	pth_cond_init_fp pth_cond_init;
-	pth_cond_await_fp pth_cond_await;
-	pth_cond_notify_fp pth_cond_notify;
-	pth_key_create_fp pth_key_create;
-	pth_key_delete_fp pth_key_delete;
-	pth_key_setdata_fp pth_key_setdata;
-	pth_key_getdata_fp pth_key_getdata;
-
-	pth_attr_of_fp pth_attr_of;
-	pth_attr_set_fp pth_attr_set;
-	pth_attr_destroy_fp pth_attr_destroy;
-	pth_time_fp pth_time;
-	pth_event_fp pth_event;
-	pth_event_status_fp pth_event_status;
-	__FUNC_TABLE_ENTRY(pth_util_select);
-	__FUNC_TABLE_ENTRY(pth_select);
-	
+	__FUNC_TABLE_ENTRY(RAND_get_rand_method);
+	__FUNC_TABLE_ENTRY(RAND_SSLeay);
 
 	/* pthread */
 	pthread_create_fp pthread_create;
@@ -412,10 +454,24 @@ typedef struct _BitcoindPreloadWorker BitcoindPreloadWorker;
 struct _BitcoindPreloadWorker {
 	GModule* handle;
 	ExecutionContext activeContext;
+	PluginName activePlugin;
 	long isPlugin;
 	FunctionTable ftable;
+	PthTable bitcoind_pthtable;
+	PthTable injector_pthtable;
 	unsigned long isRecursive;
 };
+
+static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
+	assert(worker);
+	//assert(worker->activeContext == EXECTX_PLUGIN);
+	switch (worker->activePlugin) {
+	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
+	case PLUGIN_INJECTOR: return &worker->injector_pthtable;
+	}
+	assert(0);
+	return 0;
+}
 
 /* here we search and save pointers to the functions we need to call when
  * we intercept tor's functions. this is initialized for each thread, and each
@@ -452,9 +508,7 @@ struct _BitcoindPreloadWorker {
 		exit(EXIT_FAILURE); \
 	} \
 }
-#define SETSYM_OR_FAIL(funcptr, funcstr) SETSYM_OR_FAIL_(RTLD_NEXT, funcptr, funcstr)
 #define SETSYM_OR_FAIL_V(funcptr, funcstr, version) SETSYM_OR_FAIL_V_(RTLD_NEXT, funcptr, funcstr, version)
-#define SETSYM_OR_FAIL_DEFAULT(funcptr, funcstr) SETSYM_OR_FAIL_(RTLD_DEFAULT, funcptr, funcstr)
 
 #define _FTABLE_GUARD(rctype, func, ...)       \
     if(__sync_fetch_and_add(&isRecursive, 1)) {\
@@ -510,18 +564,33 @@ struct _BitcoindPreloadWorker {
 		return rc;					\
 	}							\
 
-#define _SHD_DL_BODY(func, ...) \
+#define _SHD_DL_BODY(rctype, func, ...)					\
   {									\
     BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);	\
     assert(worker);							\
     ExecutionContext e = worker->activeContext;				\
     worker->activeContext = EXECTX_PTH;					\
-    int rc = worker->ftable.func(__VA_ARGS__);				\
+    rctype rc = worker->ftable.func(__VA_ARGS__);			\
     worker->activeContext = e;						\
     return rc;}
 
 int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
 	return sigprocmask(how, set, oset);
+}
+
+int __cxa_atexit(void (*f)(void*), void * arg, void * dso_handle) {
+	_FTABLE_GUARD(int, __cxa_atexit, f, arg, dso_handle);
+	ExecutionContext e = worker->activeContext;
+	worker->activeContext = EXECTX_PTH;
+	int rc = worker->ftable.bitcoindplugin_cxa_atexit(f, arg, dso_handle);
+	worker->activeContext = e;
+	return rc;
+}
+
+int on_exit(void (*function)(int , void *), void *arg) { assert(0); }
+int atexit(void (*f)(void)) {
+	assert(0);
+	return 0;
 }
 
 ssize_t real_fprintf(FILE *stream, const char *format, ...) {
@@ -554,50 +623,98 @@ int shd_dl_gettimeofday(struct timeval *tv, struct timezone *tz) {
 	tv->tv_sec += 1404101800;
 	return rc;
 }
-ssize_t shd_dl_read(int fp, void *d, size_t s) _SHD_DL_BODY(read, fp, d, s);
-ssize_t shd_dl_write(int fp, const void *d, size_t s) {
-  _SHD_DL_BODY(write, fp, d, s);
-}
+int shd_dl_accept(int fd, struct sockaddr* addr, socklen_t* addr_len) _SHD_DL_BODY(int, accept, fd, addr, addr_len);
+ssize_t shd_dl_read(int fp, void *d, size_t s) _SHD_DL_BODY(ssize_t, read, fp, d, s);
+ssize_t shd_dl_write(int fp, const void *d, size_t s) _SHD_DL_BODY(ssize_t, write, fp, d, s);
+int shd_dl_connect(int fd, const struct sockaddr* addr, socklen_t len) _SHD_DL_BODY(int, connect, fd, addr, len);
+ssize_t shd_dl_recv(int fd, void *buf, size_t n, int flags) _SHD_DL_BODY(ssize_t, recv, fd, buf, n, flags);
+ssize_t shd_dl_recvfrom(int fd, void *buf, size_t n, int flags, struct sockaddr* addr, socklen_t *restrict addr_len) _SHD_DL_BODY(ssize_t, recvfrom, fd, buf, n, flags, addr, addr_len);
+ssize_t shd_dl_send(int fd, const void *buf, size_t n, int flags) _SHD_DL_BODY(ssize_t, send, fd, buf, n, flags);
+ssize_t shd_dl_sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr* addr, socklen_t addr_len) _SHD_DL_BODY(ssize_t, sendto, fd, buf, n, flags, addr, addr_len);
 
+
+
+/* forward declarations */
+static void _shadowtorpreload_cryptoSetup(int);
+static void _shadowtorpreload_cryptoTeardown();
 
 
 #define _WORKER_SET(func) SETSYM_OR_FAIL(worker->ftable.func, #func)
+#define _PTH_WORKER_SET(plugin, pthfunc) g_assert(g_module_symbol(handle, #pthfunc, (gpointer*)&worker-> plugin##_pthtable.pthfunc))
+
+#define _PTH_WORKERS(plugin) \
+		_PTH_WORKER_SET(plugin, pth_read);\
+		_PTH_WORKER_SET(plugin, pth_write);\
+		_PTH_WORKER_SET(plugin, pth_spawn);\
+		_PTH_WORKER_SET(plugin, pth_usleep);\
+		_PTH_WORKER_SET(plugin, pth_ctrl);\
+		_PTH_WORKER_SET(plugin, pth_sleep);\
+		_PTH_WORKER_SET(plugin, pth_nanosleep);\
+		_PTH_WORKER_SET(plugin, pth_join);\
+		_PTH_WORKER_SET(plugin, pth_spawn);\
+		_PTH_WORKER_SET(plugin, pth_init);\
+		_PTH_WORKER_SET(plugin, pth_mutex_init);\
+		_PTH_WORKER_SET(plugin, pth_mutex_release);\
+		_PTH_WORKER_SET(plugin, pth_mutex_acquire);\
+		_PTH_WORKER_SET(plugin, pth_cond_init);\
+		_PTH_WORKER_SET(plugin, pth_cond_await);\
+		_PTH_WORKER_SET(plugin, pth_cond_notify);\
+		_PTH_WORKER_SET(plugin, pth_key_create);\
+		_PTH_WORKER_SET(plugin, pth_key_delete);\
+		_PTH_WORKER_SET(plugin, pth_key_setdata);\
+		_PTH_WORKER_SET(plugin, pth_key_getdata);\
+		_PTH_WORKER_SET(plugin, pth_attr_of);\
+		_PTH_WORKER_SET(plugin, pth_attr_set);\
+		_PTH_WORKER_SET(plugin, pth_attr_destroy);\
+		_PTH_WORKER_SET(plugin, pth_time);\
+		_PTH_WORKER_SET(plugin, pth_event);\
+		_PTH_WORKER_SET(plugin, pth_event_status);\
+		_PTH_WORKER_SET(plugin, pth_util_select);\
+		_PTH_WORKER_SET(plugin, pth_select);\
+		_PTH_WORKER_SET(plugin, pth_readv);\
+		_PTH_WORKER_SET(plugin, pth_writev);\
+		_PTH_WORKER_SET(plugin, pth_pread);\
+		_PTH_WORKER_SET(plugin, pth_pwrite);\
+		_PTH_WORKER_SET(plugin, pth_recv);\
+		_PTH_WORKER_SET(plugin, pth_send);\
+		_PTH_WORKER_SET(plugin, pth_recvfrom);\
+		_PTH_WORKER_SET(plugin, pth_sendto);\
+		_PTH_WORKER_SET(plugin, pth_connect);\
+		_PTH_WORKER_SET(plugin, pth_accept);
 
 
-void bitcoindpreload_init(GModule* handle) {
-	BitcoindPreloadWorker* worker = g_new0(BitcoindPreloadWorker, 1);
-	worker->handle = handle;
+void bitcoindpreload_init(GModule* handle, int nLocks) {	
+	BitcoindPreloadWorker* worker;
+	if (!pluginWorkerKey) {
+		worker = g_new0(BitcoindPreloadWorker, 1);
+	} else {
+		worker = pluginWorkerKey;
+	}
 
+	__sync_fetch_and_add(&isRecursive, 1);
+	/* memory allocation family */
+	g_assert(g_module_symbol(handle, "bitcoindplugin_cxa_atexit", (gpointer*)&worker->ftable.bitcoindplugin_cxa_atexit));
+	_WORKER_SET(__cxa_atexit);
+	_WORKER_SET(malloc);
+	_WORKER_SET(calloc);
+	_WORKER_SET(realloc);
+	_WORKER_SET(posix_memalign);
+	_WORKER_SET(memalign);
+	_WORKER_SET(aligned_alloc);
+	_WORKER_SET(valloc);
+	_WORKER_SET(pvalloc);
+	_WORKER_SET(free);
+	_WORKER_SET(mmap);
+
+
+	const char *module_name = g_module_name(handle);
 	/* lookup all our required symbols in this worker's module, asserting success */
-	g_assert(g_module_symbol(handle, "pth_read", (gpointer*)&worker->ftable.pth_read));
-	g_assert(g_module_symbol(handle, "pth_write", (gpointer*)&worker->ftable.pth_write));
-	g_assert(g_module_symbol(handle, "pth_spawn", (gpointer*)&worker->ftable.pth_spawn));
-	g_assert(g_module_symbol(handle, "pth_usleep", (gpointer*)&worker->ftable.pth_usleep));
-	g_assert(g_module_symbol(handle, "pth_sleep", (gpointer*)&worker->ftable.pth_sleep));
-	g_assert(g_module_symbol(handle, "pth_nanosleep", (gpointer*)&worker->ftable.pth_nanosleep));
-	g_assert(g_module_symbol(handle, "pth_join", (gpointer*)&worker->ftable.pth_join));
-	g_assert(g_module_symbol(handle, "pth_spawn", (gpointer*)&worker->ftable.pth_spawn));
-	g_assert(g_module_symbol(handle, "pth_init", (gpointer*)&worker->ftable.pth_init));
-	g_assert(g_module_symbol(handle, "pth_mutex_init", (gpointer*)&worker->ftable.pth_mutex_init));
-	g_assert(g_module_symbol(handle, "pth_mutex_release", (gpointer*)&worker->ftable.pth_mutex_release));
-	g_assert(g_module_symbol(handle, "pth_mutex_acquire", (gpointer*)&worker->ftable.pth_mutex_acquire));
-	g_assert(g_module_symbol(handle, "pth_cond_init", (gpointer*)&worker->ftable.pth_cond_init));
-	g_assert(g_module_symbol(handle, "pth_cond_await", (gpointer*)&worker->ftable.pth_cond_await));
-	g_assert(g_module_symbol(handle, "pth_cond_notify", (gpointer*)&worker->ftable.pth_cond_notify));
-	g_assert(g_module_symbol(handle, "pth_key_create", (gpointer*)&worker->ftable.pth_key_create));
-	g_assert(g_module_symbol(handle, "pth_key_delete", (gpointer*)&worker->ftable.pth_key_delete));
-	g_assert(g_module_symbol(handle, "pth_key_setdata", (gpointer*)&worker->ftable.pth_key_setdata));
-	g_assert(g_module_symbol(handle, "pth_key_getdata", (gpointer*)&worker->ftable.pth_key_getdata));
-	g_assert(g_module_symbol(handle, "pth_attr_of", (gpointer*)&worker->ftable.pth_attr_of));
-	g_assert(g_module_symbol(handle, "pth_attr_set", (gpointer*)&worker->ftable.pth_attr_set));
-	g_assert(g_module_symbol(handle, "pth_attr_destroy", (gpointer*)&worker->ftable.pth_attr_destroy));
-	g_assert(g_module_symbol(handle, "pth_time", (gpointer*)&worker->ftable.pth_time));
-	g_assert(g_module_symbol(handle, "pth_event", (gpointer*)&worker->ftable.pth_event));
-	g_assert(g_module_symbol(handle, "pth_event_status", (gpointer*)&worker->ftable.pth_event_status));
-	g_assert(g_module_symbol(handle, "pth_util_select", (gpointer*)&worker->ftable.pth_util_select));
-	g_assert(g_module_symbol(handle, "pth_select", (gpointer*)&worker->ftable.pth_select));
-
-	g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+	if (g_str_has_suffix(module_name, "bitcoind.so")) {
+		_PTH_WORKERS(bitcoind);
+		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+	} else if (g_str_has_suffix(module_name, "injector.so")) {
+		_PTH_WORKERS(injector);
+	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
 	 * do the lookup here and save to pointer so we dont have to redo the
@@ -609,6 +726,10 @@ void bitcoindpreload_init(GModule* handle) {
 	SETSYM_OR_FAIL(worker->ftable.nanosleep, "nanosleep");
 	SETSYM_OR_FAIL(worker->ftable.sleep, "sleep");
 	SETSYM_OR_FAIL(worker->ftable.write, "write");
+
+	/* Crypto global */
+	//_WORKER_SET(crypto_global_init);
+	//_WORKER_SET(crypto_global_cleanup);
 
 	/* file specific */
 	_WORKER_SET(fileno);
@@ -691,6 +812,7 @@ void bitcoindpreload_init(GModule* handle) {
 	/* crypto family */
 	_WORKER_SET(CRYPTO_get_locking_callback);
 	_WORKER_SET(CRYPTO_get_id_callback);
+	_WORKER_SET(SSL_library_init);
 	_WORKER_SET(RAND_seed);
 	_WORKER_SET(RAND_add);
 	_WORKER_SET(RAND_poll);
@@ -698,19 +820,8 @@ void bitcoindpreload_init(GModule* handle) {
 	_WORKER_SET(RAND_pseudo_bytes);
 	_WORKER_SET(RAND_cleanup);
 	_WORKER_SET(RAND_status);
-
-
-	/* memory allocation family */
-	_WORKER_SET(malloc);
-	_WORKER_SET(calloc);
-	_WORKER_SET(realloc);
-	_WORKER_SET(posix_memalign);
-	_WORKER_SET(memalign);
-	_WORKER_SET(aligned_alloc);
-	_WORKER_SET(valloc);
-	_WORKER_SET(pvalloc);
-	_WORKER_SET(free);
-	_WORKER_SET(mmap);
+	_WORKER_SET(RAND_get_rand_method);
+	_WORKER_SET(RAND_SSLeay);
 
 
 	/* pthread */
@@ -744,11 +855,26 @@ void bitcoindpreload_init(GModule* handle) {
 	assert(sizeof(pthread_mutex_t) >= sizeof(pth_mutex_t));
 	assert(sizeof(pthread_cond_t) >= sizeof(pth_cond_t));
         assert(sizeof(pthread_key_t) >= sizeof(pth_key_t));
+
+	__sync_fetch_and_sub(&isRecursive, 1);
+
+	_shadowtorpreload_cryptoSetup(nLocks);
+	unsigned char a;
+	worker->ftable.RAND_bytes(&a, 1);
 }
 
-void bitcoindpreload_setContext(ExecutionContext ctx) {
+void bitcoindpreload_setPluginContext(PluginName plg) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	worker->activeContext = ctx;
+	worker->activeContext = EXECTX_PLUGIN;
+	worker->activePlugin = plg;
+}
+void bitcoindpreload_setShadowContext() {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	worker->activeContext = EXECTX_SHADOW;
+}
+void bitcoindpreload_setPthContext() {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	worker->activeContext = EXECTX_PTH;
 }
 
 int CLogPrintStr(const char *str) _SHADOW_GUARD(int, CLogPrintStr, str);
@@ -761,9 +887,9 @@ ssize_t write(int fp, const void *d, size_t s) {
 	if(worker && worker->activeContext == EXECTX_PLUGIN) {
 		real_fprintf(stderr, "write: going to pth fd:%d\n", fp);
 		//assert(0);
-		assert(worker->ftable.pth_write);
+		assert(_get_active_pthtable(worker)->pth_write);
 		worker->activeContext = EXECTX_PTH;
-		rc = worker->ftable.pth_write(fp, d, s);
+		rc = _get_active_pthtable(worker)->pth_write(fp, d, s);
 		worker->activeContext = EXECTX_PLUGIN;
 	} else if (worker) {
 		// dont mess with shadow's calls, and dont change context 
@@ -785,7 +911,7 @@ ssize_t read(int fp, void *d, size_t s) {
 		real_fprintf(stderr, "read: going to pth fd:%d\n", fp);
 		//assert(fp != -1);
 		worker->activeContext = EXECTX_PTH;
-		rc = worker->ftable.pth_read(fp, d, s);
+		rc = _get_active_pthtable(worker)->pth_read(fp, d, s);
 		worker->activeContext = EXECTX_PLUGIN;
 	} else if (worker) {
 		real_fprintf(stderr, "read skipping worker\n");
@@ -803,13 +929,14 @@ ssize_t read(int fp, void *d, size_t s) {
 int close(int fd) _SHADOW_GUARD(int, close, fd);
 
 int usleep(unsigned int usec) {
-  BitcoindPreloadWorker* worker_ = g_private_get(&pluginWorkerKey);
-    real_fprintf(stderr, "usleep: activeContext:%d\n", worker_->activeContext);
-
+	BitcoindPreloadWorker* worker_ = g_private_get(&pluginWorkerKey);
+	_get_active_pthtable(worker_)->pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
+	real_fprintf(stderr, "usleep: activeContext:%d\n", worker_->activeContext);
 	_FTABLE_GUARD(int, usleep, usec);
         worker->activeContext = EXECTX_PTH;
 	real_fprintf(stderr, "about to pth_sleep\n");
-	int rc = worker->ftable.pth_usleep(usec);
+	_get_active_pthtable(worker)->pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
+	int rc = _get_active_pthtable(worker)->pth_usleep(usec);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -818,7 +945,7 @@ int nanosleep(const struct timespec *rqtp, struct timespec *rmtp) {
 	_FTABLE_GUARD(int, nanosleep, rqtp, rmtp);
         worker->activeContext = EXECTX_PTH;
 	real_fprintf(stderr, "about to pth_nanosleep\n");
-	int rc = worker->ftable.pth_nanosleep(rqtp, rmtp);
+	int rc = _get_active_pthtable(worker)->pth_nanosleep(rqtp, rmtp);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -826,7 +953,7 @@ int nanosleep(const struct timespec *rqtp, struct timespec *rmtp) {
 unsigned int sleep(unsigned int sec) {
 	_FTABLE_GUARD(unsigned int, sleep, sec);
         worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.pth_sleep(sec);
+	int rc = _get_active_pthtable(worker)->pth_sleep(sec);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -879,31 +1006,46 @@ int epoll_pwait(int epfd, struct epoll_event *events,
 	_SHADOW_GUARD(int, epoll_pwait, epfd, events, maxevents, timeout, ss);
 
 
-
 /* socket/io family */
+
+#define _PTH_GUARD(rctype, func, ...) {				\
+		_FTABLE_GUARD(rctype, func, __VA_ARGS__);	\
+		assert(worker->activeContext == EXECTX_PLUGIN);\ 
+		worker->activeContext = EXECTX_PTH;		\
+		rctype rc = _get_active_pthtable(worker)->pth_##func(__VA_ARGS__);	\
+		worker->activeContext = EXECTX_PLUGIN;		\
+		return rc;					\
+	}							\
 
 int socket(int domain, int type, int protocol)
 	_SHADOW_GUARD(int, socket, domain, type, protocol); 
 int socketpair(int domain, int type, int protocol, int fds[2]) _SHADOW_GUARD(int, socketpair, domain, type, protocol, fds);
 int bind(int fd, const struct sockaddr* addr, socklen_t len)  _SHADOW_GUARD(int, bind, fd, addr, len);
 int getsockname(int fd, struct sockaddr* addr, socklen_t* len) _SHADOW_GUARD(int, getsockname, fd, addr, len);
-int connect(int fd, const struct sockaddr* addr, socklen_t len) _SHADOW_GUARD(int, connect, fd, addr, len);
+int connect(int fd, const struct sockaddr* addr, socklen_t len) _PTH_GUARD(int, connect, fd, addr, len);
 int getpeername(int fd, struct sockaddr* addr, socklen_t* len) _SHADOW_GUARD(int, getpeername, fd, addr, len);
-ssize_t send(int fd, const void *buf, size_t n, int flags) _SHADOW_GUARD(ssize_t, send, fd, buf, n, flags);
-ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr* addr, socklen_t addr_len) _SHADOW_GUARD(ssize_t, sendto, fd, buf, n, flags, addr, addr_len);
-ssize_t sendmsg(int fd, const struct msghdr *message, int flags) _SHADOW_GUARD(ssize_t, sendmsg, fd, message, flags);
-ssize_t recv(int fd, void *buf, size_t n, int flags) _SHADOW_GUARD(ssize_t, recv, fd, buf, n, flags);
-ssize_t recvfrom(int fd, void *buf, size_t n, int flags, struct sockaddr* addr, socklen_t *restrict addr_len) _SHADOW_GUARD(ssize_t, recvfrom, fd, buf, n, flags, addr, addr_len);
-ssize_t recvmsg(int fd, struct msghdr *message, int flags) _SHADOW_GUARD(ssize_t, recvmsg, fd, message, flags);
+ssize_t send(int fd, const void *buf, size_t n, int flags) _PTH_GUARD(ssize_t, send, fd, buf, n, flags);
+ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr* addr, socklen_t addr_len) _PTH_GUARD(ssize_t, sendto, fd, buf, n, flags, addr, addr_len);
+ssize_t sendmsg(int fd, const struct msghdr *message, int flags) { assert(0); }//_PTH_GUARD(ssize_t, sendmsg, fd, message, flags);
+ssize_t recv(int fd, void *buf, size_t n, int flags) _PTH_GUARD(ssize_t, recv, fd, buf, n, flags);
+ssize_t recvfrom(int fd, void *buf, size_t n, int flags, struct sockaddr* addr, socklen_t *restrict addr_len) _PTH_GUARD(ssize_t, recvfrom, fd, buf, n, flags, addr, addr_len);
+ssize_t recvmsg(int fd, struct msghdr *message, int flags) { assert(0); }//_SHADOW_GUARD(ssize_t, recvmsg, fd, message, flags);
 int getsockopt(int fd, int level, int optname, void* optval, socklen_t* optlen) _SHADOW_GUARD(int, getsockopt, fd, level, optname, optval, optlen);
 int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen) _SHADOW_GUARD(int, setsockopt, fd, level, optname, optval, optlen);
 int listen(int fd, int n) _SHADOW_GUARD(int, listen, fd, n);
-int accept(int fd, struct sockaddr* addr, socklen_t* addr_len) _SHADOW_GUARD(int, accept, fd, addr, addr_len);
-int accept4(int fd, struct sockaddr* addr, socklen_t* addr_len, int flags) _SHADOW_GUARD(int, accept4, fd, addr, addr_len, flags);
+int accept(int fd, struct sockaddr* addr, socklen_t* addr_len) _PTH_GUARD(int, accept, fd, addr, addr_len);
+int accept4(int fd, struct sockaddr* addr, socklen_t* addr_len, int flags) {
+	assert(0);
+	//_SHADOW_GUARD(int, accept4, fd, addr, addr_len, flags);
+}
 int shutdown(int fd, int how) _SHADOW_GUARD(int, shutdown, fd, how);
 //ssize_t read(int fd, void *buff, size_t numbytes) { assert(0); }
 //ssize_t write(int fd, const void *buff, size_t n) { assert(0); }
 //int close(int fd) { assert(0); }
+ssize_t readv(int fd, const struct iovec *iov, int iovcnt) { assert(0); }
+ssize_t writev(int fd, const struct iovec *iov, int iovcnt) { assert(0); }
+ssize_t pread(int fd, void *buf, size_t nbytes, off_t offset) { assert(0); }
+ssize_t pwrite(int fd, const void *buf, size_t nbytes, off_t offset) { assert(0); }
 
 int fcntl(int fd, int cmd, ...) {
 	va_list farg;
@@ -979,7 +1121,7 @@ int select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *t
 	assert(worker->activeContext == EXECTX_PLUGIN);
 	worker->activeContext = EXECTX_PTH;
 	// TODO: put some select/epoll caching logic here
-	int rc = worker->ftable.pth_select(nfds, rfds, wfds, efds, timeout);
+	int rc = _get_active_pthtable(worker)->pth_select(nfds, rfds, wfds, efds, timeout);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -1265,7 +1407,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	} else {
 		na = (attr != NULL) ? *((pth_attr_t*)attr) : PTH_ATTR_DEFAULT;
 		
-		*thread = (pthread_t)worker->ftable.pth_spawn(na, start_routine, arg);
+		*thread = (pthread_t)_get_active_pthtable(worker)->pth_spawn(na, start_routine, arg);
 		if (thread == NULL) {
 			errno = EAGAIN;
 			rc = EAGAIN;
@@ -1281,7 +1423,7 @@ int pthread_join(pthread_t thread, void **retval) {
         worker->activeContext = EXECTX_PTH;
 	real_fprintf(stderr, "pthread_join to pth\n");
 	int rc = 0;
-        if (!worker->ftable.pth_join((pth_t)thread, retval)) {
+        if (!_get_active_pthtable(worker)->pth_join((pth_t)thread, retval)) {
 		rc = errno;
         } else if(retval != NULL && *retval == PTH_CANCELED) {
 		*retval = PTHREAD_CANCELED;
@@ -1299,11 +1441,11 @@ int pthread_detach(pthread_t thread) {
         if (thread == 0) {
             errno = EINVAL;
             rc = EINVAL;
-        } else if ((na = worker->ftable.pth_attr_of((pth_t)thread)) == NULL ||
-                !worker->ftable.pth_attr_set(na, PTH_ATTR_JOINABLE, FALSE)) {
+        } else if ((na = _get_active_pthtable(worker)->pth_attr_of((pth_t)thread)) == NULL ||
+                !_get_active_pthtable(worker)->pth_attr_set(na, PTH_ATTR_JOINABLE, FALSE)) {
             rc = errno;
         } else {
-            worker->ftable.pth_attr_destroy(na);
+            _get_active_pthtable(worker)->pth_attr_destroy(na);
         }
 
         worker->activeContext = EXECTX_PLUGIN;
@@ -1333,9 +1475,9 @@ int pthread_key_create(pthread_key_t *key, void (*destructor)(void*)) {
 	_FTABLE_GUARD(int, pthread_key_create, key, destructor);
         worker->activeContext = EXECTX_PTH;
 	real_fprintf(stderr, "pthread_key_create:%p\n", key);
-	worker->ftable.pth_init();
+	_get_active_pthtable(worker)->pth_init();
 	int rc = 0;
-        if (!worker->ftable.pth_key_create((pth_key_t *)key, destructor)) {
+        if (!_get_active_pthtable(worker)->pth_key_create((pth_key_t *)key, destructor)) {
 		rc = errno;
         }
 	real_fprintf(stderr, "pthread_create:%d\n", *((pth_key_t*)key));
@@ -1349,7 +1491,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)  {
         worker->activeContext = EXECTX_PTH;
         //real_fprintf(stderr, "pthread_setspecific:%d %p\n", key, value);
 	int rc = 0;
-        if (!worker->ftable.pth_key_setdata((pth_key_t)key, value)) {
+        if (!_get_active_pthtable(worker)->pth_key_setdata((pth_key_t)key, value)) {
 		rc = errno;
         }
         worker->activeContext = EXECTX_PLUGIN;
@@ -1362,7 +1504,7 @@ void *pthread_getspecific(pthread_key_t key) {
         worker->activeContext = EXECTX_PTH;
         //real_fprintf(stderr, "pthread_getspecific:%d\n", key);
 	void* pointer = NULL;
-        pointer = worker->ftable.pth_key_getdata((pth_key_t)key);
+        pointer = _get_active_pthtable(worker)->pth_key_getdata((pth_key_t)key);
         worker->activeContext = EXECTX_PLUGIN;
 	return pointer;
 }
@@ -1403,10 +1545,10 @@ int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
 	_FTABLE_GUARD_V(int, pthread_cond_init, "GLIBC_2.3.2", cond, attr);
         worker->activeContext = EXECTX_PTH;
 	int rc = 0;
-	worker->ftable.pth_init();
+	_get_active_pthtable(worker)->pth_init();
 	if (cond == NULL)
 		rc = EINVAL;
-	else if (!worker->ftable.pth_cond_init((pth_cond_t *)cond))
+	else if (!_get_active_pthtable(worker)->pth_cond_init((pth_cond_t *)cond))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1434,7 +1576,7 @@ int pthread_cond_signal(pthread_cond_t *cond) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_cond_notify((pth_cond_t *)cond, FALSE))
+	if (!rc && !_get_active_pthtable(worker)->pth_cond_notify((pth_cond_t *)cond, FALSE))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1452,7 +1594,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_cond_notify((pth_cond_t *)cond, TRUE))
+	if (!rc && !_get_active_pthtable(worker)->pth_cond_notify((pth_cond_t *)cond, TRUE))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1476,7 +1618,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_cond_await((pth_cond_t *)cond, (pth_mutex_t *)mutex, NULL))
+	if (!rc && !_get_active_pthtable(worker)->pth_cond_await((pth_cond_t *)cond, (pth_mutex_t *)mutex, NULL))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1508,12 +1650,12 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 		worker->activeContext = EXECTX_PTH;
 	}
 	if (!rc)
-		ev = worker->ftable.pth_event(PTH_EVENT_TIME|PTH_MODE_STATIC, &ev_key,
-			       worker->ftable.pth_time(abstime->tv_sec, (abstime->tv_nsec)/1000)
+		ev = _get_active_pthtable(worker)->pth_event(PTH_EVENT_TIME|PTH_MODE_STATIC, &ev_key,
+			       _get_active_pthtable(worker)->pth_time(abstime->tv_sec, (abstime->tv_nsec)/1000)
 			       );
-	if (!rc && !worker->ftable.pth_cond_await((pth_cond_t *)cond, (pth_mutex_t *)mutex, ev))
+	if (!rc && !_get_active_pthtable(worker)->pth_cond_await((pth_cond_t *)cond, (pth_mutex_t *)mutex, ev))
 		rc = errno;
-	if (!rc && worker->ftable.pth_event_status(ev) == PTH_STATUS_OCCURRED)
+	if (!rc && _get_active_pthtable(worker)->pth_event_status(ev) == PTH_STATUS_OCCURRED)
 		rc = ETIMEDOUT;
 
         worker->activeContext = EXECTX_PLUGIN;
@@ -1524,11 +1666,11 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
 	_FTABLE_GUARD(int, pthread_mutex_init, mutex, attr);
         worker->activeContext = EXECTX_PTH;
 	int rc = 0;
-	worker->ftable.pth_init();
+	_get_active_pthtable(worker)->pth_init();
 	//real_fprintf(stderr, "pthread_mutex_init: %p\n", mutex);
 	if (mutex == NULL) {
 		rc = EINVAL;
-	} else if (!worker->ftable.pth_mutex_init((pth_mutex_t *)mutex))
+	} else if (!_get_active_pthtable(worker)->pth_mutex_init((pth_mutex_t *)mutex))
 		rc = errno;
 	if (!rc) assert(!PTHREAD_MUTEX_IS_INITIALIZED(*mutex));
         worker->activeContext = EXECTX_PLUGIN;
@@ -1559,7 +1701,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_mutex_acquire((pth_mutex_t *)mutex, FALSE, NULL))
+	if (!rc && !_get_active_pthtable(worker)->pth_mutex_acquire((pth_mutex_t *)mutex, FALSE, NULL))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1578,7 +1720,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_mutex_acquire((pth_mutex_t *)mutex, TRUE, NULL))
+	if (!rc && !_get_active_pthtable(worker)->pth_mutex_acquire((pth_mutex_t *)mutex, TRUE, NULL))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
@@ -1599,16 +1741,159 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 			rc = errno;
 		worker->activeContext = EXECTX_PTH;
 	}
-	if (!rc && !worker->ftable.pth_mutex_release((pth_mutex_t *)mutex))
+	if (!rc && !_get_active_pthtable(worker)->pth_mutex_release((pth_mutex_t *)mutex))
 		rc = errno;
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
 
 
+/********************************************************************************
+ * the code below provides support for multi-threaded openssl.
+ * we need global state here to manage locking for all threads, so we use the
+ * preload library because the symbols here do not get hoisted and copied
+ * for each instance of the plug-in.
+ *
+ * @see '$man CRYPTO_lock'
+ ********************************************************************************/
+
+/*
+ * Holds global state for the Tor preload library. This state will not be
+ * copied for every instance of Tor, or for every instance of the plugin.
+ * Therefore, we must ensure that modifications to it are properly locked
+ * for thread safety, it is not initialized multiple times, etc.
+ */
+typedef struct _PreloadGlobal PreloadGlobal;
+struct _PreloadGlobal {
+	gboolean initialized;
+	gint nTorCryptoNodes;
+	gint nThreads;
+	gint numCryptoThreadLocks;
+	GRWLock* cryptoThreadLocks;
+};
+
+G_LOCK_DEFINE_STATIC(shadowtorpreloadGlobalLock);
+PreloadGlobal shadowtorpreloadGlobalState = {FALSE, 0, 0, 0, NULL};
+
+/**
+ * these init and cleanup Tor functions are called to handle openssl.
+ * they must be globally locked and only called once globally to avoid openssl errors.
+ */
+
+BitcoindPreloadWorker *_preload_getworker() {
+	return g_private_get(&pluginWorkerKey);
+}
+
+
+int crypto_global_init(int useAccel, const char *accelName, const char *accelDir) {
+	G_LOCK(shadowtorpreloadGlobalLock);
+
+	gint result = 0;
+	if(++shadowtorpreloadGlobalState.nTorCryptoNodes == 1) {
+		result = _preload_getworker()->ftable.crypto_global_init(useAccel, accelName, accelDir);
+	}
+
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+	return result;
+}
+int crypto_global_cleanup(void) {
+	G_LOCK(shadowtorpreloadGlobalLock);
+
+	gint result = 0;
+	if(--shadowtorpreloadGlobalState.nTorCryptoNodes == 0) {
+		result = _preload_getworker()->ftable.crypto_global_cleanup();
+	}
+
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+	return result;
+}
+
+static unsigned long _shadowtorpreload_getIDFunc() {
+	/* return an ID that is unique for each thread */
+	return (unsigned long)(g_private_get(&pluginWorkerKey));
+}
+
+unsigned long (*CRYPTO_get_id_callback(void))(void) {
+	return _shadowtorpreload_getIDFunc;
+}
+
+static void _shadowtorpreload_cryptoLockingFunc(int mode, int n, const char *file, int line) {
+	assert(shadowtorpreloadGlobalState.initialized);
+
+	GRWLock* lock = &(shadowtorpreloadGlobalState.cryptoThreadLocks[n]);
+	assert(lock);
+
+	if(mode & CRYPTO_LOCK) {
+		if(mode & CRYPTO_READ) {
+			g_rw_lock_reader_lock(lock);
+		} else if(mode & CRYPTO_WRITE) {
+			g_rw_lock_writer_lock(lock);
+		}
+	} else if(mode & CRYPTO_UNLOCK) {
+		if(mode & CRYPTO_READ) {
+			g_rw_lock_reader_unlock(lock);
+		} else if(mode & CRYPTO_WRITE) {
+			g_rw_lock_writer_unlock(lock);
+		}
+	}
+}
+
+void (*CRYPTO_get_locking_callback(void))(int mode,int type,const char *file,
+					  int line) {
+	return _shadowtorpreload_cryptoLockingFunc;
+}
+
+static void _shadowtorpreload_cryptoSetup(int numLocks) {
+	G_LOCK(shadowtorpreloadGlobalLock);
+
+	if(!shadowtorpreloadGlobalState.initialized) {
+		shadowtorpreloadGlobalState.numCryptoThreadLocks = numLocks;
+
+		shadowtorpreloadGlobalState.cryptoThreadLocks = g_new0(GRWLock, numLocks);
+		for(gint i = 0; i < numLocks; i++) {
+			g_rw_lock_init(&(shadowtorpreloadGlobalState.cryptoThreadLocks[i]));
+		}
+
+		shadowtorpreloadGlobalState.initialized = TRUE;
+	}
+
+	shadowtorpreloadGlobalState.nThreads++;
+
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+}
+
+static void _shadowtorpreload_cryptoTeardown() {
+	G_LOCK(shadowtorpreloadGlobalLock);
+
+	if(shadowtorpreloadGlobalState.initialized &&
+            shadowtorpreloadGlobalState.cryptoThreadLocks &&
+	   --shadowtorpreloadGlobalState.nThreads == 0) {
+
+		for(int i = 0; i < shadowtorpreloadGlobalState.numCryptoThreadLocks; i++) {
+			g_rw_lock_clear(&(shadowtorpreloadGlobalState.cryptoThreadLocks[i]));
+		}
+
+		g_free(shadowtorpreloadGlobalState.cryptoThreadLocks);
+		shadowtorpreloadGlobalState.cryptoThreadLocks = NULL;
+		shadowtorpreloadGlobalState.initialized = 0;
+	}
+
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+}
+
+/********************************************************************************
+ * end code that supports multi-threaded openssl.
+ ********************************************************************************/
+
 /* SSL */
-void* CRYPTO_get_locking_callback() { assert(0); }
-void* CRYPTO_get_id_callback() { assert(0); }
+int SSL_library_init() {
+	//_SHADOW_GUARD(int, SSL_library_init);
+}
+void SSL_load_error_strings() {
+	// FIXME
+}
+void __do_global_dtors_aux() {
+}
 void RAND_seed(const void *buf, int num) { assert(0); }
 void RAND_add(const void *buf, int num, double entropy) {
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
@@ -1642,7 +1927,7 @@ int RAND_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_bytes, buf, 
 int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseudo_bytes, buf, num);
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
-const void *RAND_get_rand_method() { assert(0); }
+const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_method);
 
 
 

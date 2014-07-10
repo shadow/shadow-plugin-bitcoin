@@ -18,13 +18,6 @@
 #include <boost/thread/once.hpp>
 #include <string>
 
-void *doNothing(void*) { 
-	fprintf(stderr, "_start_bitcoind:about to read\n");
-	char buf[10] = "hiya!\n";
-	write(2, buf, 6);
-	return NULL;
-}
-
 extern bool AppInit(int argc, char* argv[]);
 
 static ShadowLogFunc slogf;

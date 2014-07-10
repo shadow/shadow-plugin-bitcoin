@@ -21,14 +21,7 @@
 
 #include <shd-library.h>
 
-typedef enum _ExecutionContext ExecutionContext;
-enum _ExecutionContext {
-    EXECTX_NONE, EXECTX_PLUGIN, EXECTX_PTH, EXECTX_SHADOW,
-};
-
-void bitcoindpreload_init(GModule* handle);
-void bitcoindpreload_setContext(ExecutionContext ctx);
-
+#include "bitcoind-preload.h"
 
 typedef struct _BitcoinD BitcoinD;
 
