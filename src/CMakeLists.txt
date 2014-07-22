@@ -180,6 +180,9 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/version.cpp
     #${BITCOIN_ROOT_DIR}/src/wallet.cpp
     #${BITCOIN_ROOT_DIR}/src/walletdb.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/ripemd160.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/sha1.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/sha2.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
