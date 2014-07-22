@@ -251,10 +251,11 @@ set(PTH_SOURCES
 ADD_CUSTOM_COMMAND (
    OUTPUT ${PTH_ROOT_DIR}/pth_p.h
    COMMAND ${PTH_ROOT_DIR}/shtool 
-   ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M '==\#==' ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
-   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_ROOT_DIR}/*.h ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M "==\#==" ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   COMMENT "Generating pth_p.h" VERBATIM
 )
-ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in)
+ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
 #set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS pth_p.h)
 add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
 add_dependencies(shadow-pth-bitcode generate_pth)
