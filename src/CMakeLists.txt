@@ -138,40 +138,48 @@ message(STATUS "BITCOIN_ROOT_DIR = ${BITCOIN_ROOT_DIR}")
 set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/addrman.cpp
     ${BITCOIN_ROOT_DIR}/src/alert.cpp  
+    ${BITCOIN_ROOT_DIR}/src/base58.cpp 
+    ${BITCOIN_ROOT_DIR}/src/allocators.cpp
     ${BITCOIN_ROOT_DIR}/src/bloom.cpp  
+    ${BITCOIN_ROOT_DIR}/src/chainparamsbase.cpp
+    ${BITCOIN_ROOT_DIR}/src/chainparams.cpp
     ${BITCOIN_ROOT_DIR}/src/checkpoints.cpp
     ${BITCOIN_ROOT_DIR}/src/coins.cpp  
-    ${BITCOIN_ROOT_DIR}/src/init.cpp   
+    ${BITCOIN_ROOT_DIR}/src/core.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypter.cpp
+    #${BITCOIN_ROOT_DIR}/src/db.cpp
+    ${BITCOIN_ROOT_DIR}/src/hash.cpp
+    ${BITCOIN_ROOT_DIR}/src/init.cpp
+    ${BITCOIN_ROOT_DIR}/src/key.cpp
     ${BITCOIN_ROOT_DIR}/src/keystore.cpp
     ${BITCOIN_ROOT_DIR}/src/leveldbwrapper.cpp
     ${BITCOIN_ROOT_DIR}/src/main.cpp   
     ${BITCOIN_ROOT_DIR}/src/miner.cpp  
+    ${BITCOIN_ROOT_DIR}/src/netbase.cpp
     ${BITCOIN_ROOT_DIR}/src/net.cpp
     ${BITCOIN_ROOT_DIR}/src/noui.cpp   
+    ${BITCOIN_ROOT_DIR}/src/pow.cpp
+    ${BITCOIN_ROOT_DIR}/src/protocol.cpp
+    ${BITCOIN_ROOT_DIR}/src/random.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcblockchain.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcmining.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcmisc.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcnet.cpp 
+    ${BITCOIN_ROOT_DIR}/src/rpcprotocol.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcrawtransaction.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcserver.cpp
-    ${BITCOIN_ROOT_DIR}/src/txdb.cpp   
+    #${BITCOIN_ROOT_DIR}/src/rpcwallet.cpp
+    ${BITCOIN_ROOT_DIR}/src/script.cpp
+    ${BITCOIN_ROOT_DIR}/src/sync.cpp
+    ${BITCOIN_ROOT_DIR}/src/timedata.cpp
+    ${BITCOIN_ROOT_DIR}/src/txdb.cpp
     ${BITCOIN_ROOT_DIR}/src/txmempool.cpp
-    ${BITCOIN_ROOT_DIR}/src/base58.cpp 
-    ${BITCOIN_ROOT_DIR}/src/allocators.cpp
-    ${BITCOIN_ROOT_DIR}/src/chainparams.cpp
-    ${BITCOIN_ROOT_DIR}/src/core.cpp   
-    ${BITCOIN_ROOT_DIR}/src/hash.cpp   
-    ${BITCOIN_ROOT_DIR}/src/key.cpp
-    ${BITCOIN_ROOT_DIR}/src/netbase.cpp
-    ${BITCOIN_ROOT_DIR}/src/protocol.cpp
-    ${BITCOIN_ROOT_DIR}/src/rpcprotocol.cpp
-    ${BITCOIN_ROOT_DIR}/src/script.cpp 
-    ${BITCOIN_ROOT_DIR}/src/sync.cpp  
     ${BITCOIN_ROOT_DIR}/src/uint256.cpp
     ${BITCOIN_ROOT_DIR}/src/util.cpp   
     ${BITCOIN_ROOT_DIR}/src/version.cpp
-    ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
-    ${BITCOIN_ROOT_DIR}/src/random.cpp
+    #${BITCOIN_ROOT_DIR}/src/wallet.cpp
+    #${BITCOIN_ROOT_DIR}/src/walletdb.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
