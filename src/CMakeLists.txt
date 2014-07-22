@@ -141,7 +141,7 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/base58.cpp 
     ${BITCOIN_ROOT_DIR}/src/allocators.cpp
     ${BITCOIN_ROOT_DIR}/src/bloom.cpp  
-    ${BITCOIN_ROOT_DIR}/src/chainparamsbase.cpp
+    #${BITCOIN_ROOT_DIR}/src/chainparamsbase.cpp
     ${BITCOIN_ROOT_DIR}/src/chainparams.cpp
     ${BITCOIN_ROOT_DIR}/src/checkpoints.cpp
     ${BITCOIN_ROOT_DIR}/src/coins.cpp  
@@ -158,9 +158,9 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/netbase.cpp
     ${BITCOIN_ROOT_DIR}/src/net.cpp
     ${BITCOIN_ROOT_DIR}/src/noui.cpp   
-    ${BITCOIN_ROOT_DIR}/src/pow.cpp
+    #${BITCOIN_ROOT_DIR}/src/pow.cpp
     ${BITCOIN_ROOT_DIR}/src/protocol.cpp
-    ${BITCOIN_ROOT_DIR}/src/random.cpp
+    #${BITCOIN_ROOT_DIR}/src/random.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcblockchain.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcmining.cpp
@@ -172,23 +172,23 @@ set(bitcoin_sources
     #${BITCOIN_ROOT_DIR}/src/rpcwallet.cpp
     ${BITCOIN_ROOT_DIR}/src/script.cpp
     ${BITCOIN_ROOT_DIR}/src/sync.cpp
-    ${BITCOIN_ROOT_DIR}/src/timedata.cpp
+    #${BITCOIN_ROOT_DIR}/src/timedata.cpp
     ${BITCOIN_ROOT_DIR}/src/txdb.cpp
     ${BITCOIN_ROOT_DIR}/src/txmempool.cpp
-    ${BITCOIN_ROOT_DIR}/src/uint256.cpp
+    #${BITCOIN_ROOT_DIR}/src/uint256.cpp
     ${BITCOIN_ROOT_DIR}/src/util.cpp   
     ${BITCOIN_ROOT_DIR}/src/version.cpp
     #${BITCOIN_ROOT_DIR}/src/wallet.cpp
     #${BITCOIN_ROOT_DIR}/src/walletdb.cpp
     # Crypto
-    ${BITCOIN_ROOT_DIR}/src/crypto/ripemd160.cpp
-    ${BITCOIN_ROOT_DIR}/src/crypto/sha1.cpp
-    ${BITCOIN_ROOT_DIR}/src/crypto/sha2.cpp
+    #${BITCOIN_ROOT_DIR}/src/crypto/ripemd160.cpp
+    #${BITCOIN_ROOT_DIR}/src/crypto/sha1.cpp
+    #${BITCOIN_ROOT_DIR}/src/crypto/sha2.cpp
     # Compact
     #${BITCOIN_ROOT_DIR}/src/compat/glibc_compat.cpp
-    ${BITCOIN_ROOT_DIR}/src/compat/glibc_sanity.cpp
-    ${BITCOIN_ROOT_DIR}/src/compat/glibcxx_compat.cpp
-    ${BITCOIN_ROOT_DIR}/src/compat/glibcxx_sanity.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibc_sanity.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_compat.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_sanity.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)

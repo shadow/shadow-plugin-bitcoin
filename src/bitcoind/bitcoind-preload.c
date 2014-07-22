@@ -152,6 +152,8 @@ struct addrinfo;
 struct hostent;
 typedef int (*gethostname_fp)(char*, size_t);
 typedef int (*getaddrinfo_fp)(const char*, const char*, const struct addrinfo*, struct addrinfo**);
+struct gaicb;
+typedef int (*getaddrinfo_a_fp)(int mode, struct gaicb *list[], int nitems, struct sigevent *sevp);
 typedef int (*freeaddrinfo_fp)(struct addrinfo*);
 typedef int (*getnameinfo_fp)(const struct sockaddr *, socklen_t, char *, size_t, char *, size_t, int);
 typedef struct hostent* (*gethostbyname_fp)(const char*);
@@ -1268,6 +1270,11 @@ int gethostname(char* name, size_t len) _SHADOW_GUARD(int, gethostname, name, le
 int getaddrinfo(const char *name, const char *service,
 		const struct addrinfo *hints, struct addrinfo **res)
 	_SHADOW_GUARD(int, getaddrinfo, name, service, hints, res);
+int getaddrinfo_a(int mode, struct gaicb *list[], int nitems, struct sigevent *sevp) { return 0; } 
+int gai_suspend(struct gaicb *list[], int nitems,
+                struct timespec *timeout) { return 0; }
+int gai_error(struct gaicb *req) { return 0; }
+int gai_cancel(struct gaicb *req) { return 0; }
 void freeaddrinfo(struct addrinfo *res) _SHADOW_GUARD_VOID(freeaddrinfo, res);
 int getnameinfo(const struct sockaddr* sa, socklen_t salen,
 		char * host, socklen_t hostlen, char *serv, socklen_t servlen,
@@ -1887,9 +1894,6 @@ int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseud
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
 const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_method);
-
-
-
 
 /* Inception! g_private_get is special because it's called by shadow before deciding
    whether to look up symbols again from the beginning. */
