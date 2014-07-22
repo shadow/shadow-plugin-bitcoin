@@ -170,6 +170,7 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/util.cpp   
     ${BITCOIN_ROOT_DIR}/src/version.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
+    ${BITCOIN_ROOT_DIR}/src/random.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
