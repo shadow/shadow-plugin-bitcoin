@@ -166,7 +166,8 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/protocol.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcprotocol.cpp
     ${BITCOIN_ROOT_DIR}/src/script.cpp 
-    ${BITCOIN_ROOT_DIR}/src/sync.cpp   
+    ${BITCOIN_ROOT_DIR}/src/sync.cpp  
+    ${BITCOIN_ROOT_DIR}/src/uint256.cpp
     ${BITCOIN_ROOT_DIR}/src/util.cpp   
     ${BITCOIN_ROOT_DIR}/src/version.cpp
     ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
