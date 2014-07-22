@@ -180,9 +180,15 @@ set(bitcoin_sources
     ${BITCOIN_ROOT_DIR}/src/version.cpp
     #${BITCOIN_ROOT_DIR}/src/wallet.cpp
     #${BITCOIN_ROOT_DIR}/src/walletdb.cpp
+    # Crypto
     ${BITCOIN_ROOT_DIR}/src/crypto/ripemd160.cpp
     ${BITCOIN_ROOT_DIR}/src/crypto/sha1.cpp
     ${BITCOIN_ROOT_DIR}/src/crypto/sha2.cpp
+    # Compact
+    #${BITCOIN_ROOT_DIR}/src/compat/glibc_compat.cpp
+    ${BITCOIN_ROOT_DIR}/src/compat/glibc_sanity.cpp
+    ${BITCOIN_ROOT_DIR}/src/compat/glibcxx_compat.cpp
+    ${BITCOIN_ROOT_DIR}/src/compat/glibcxx_sanity.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
