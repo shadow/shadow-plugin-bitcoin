@@ -73,10 +73,7 @@ Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify t
 ### gnu pth
 
 ```bash
-git clone git@github.com:amiller/gnu-pth.git
-cd gnu-pth
-git checkout -b shadow
-cd ..
+git clone git@github.com:amiller/gnu-pth.git -b shadow
 ```
 
 ### picocoin

@@ -27,6 +27,8 @@
 
 #include "pth.h"
 
+#define SHADOW_TIMER_OFFSET 1404101800
+
 //#define BITCOIND_LIB_PREFIX "intercept_"
 
 typedef int (*close_fp)(int);
@@ -620,7 +622,7 @@ int shd_dl_gettimeofday(struct timeval *tv, struct timezone *tz) {
 	worker->activeContext = EXECTX_PTH;
 	int rc = gettimeofday(tv, tz);
 	worker->activeContext = e;
-	tv->tv_sec += 1404101800;
+	tv->tv_sec += SHADOW_TIMER_OFFSET;
 	return rc;
 }
 int shd_dl_accept(int fd, struct sockaddr* addr, socklen_t* addr_len) _SHD_DL_BODY(int, accept, fd, addr, addr_len);
@@ -774,7 +776,6 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_WORKER_SET(pipe);
 	_WORKER_SET(pipe2);
 	_WORKER_SET(eventfd);
-
 
 	/* time family */
 	_WORKER_SET(gettimeofday);
@@ -985,9 +986,13 @@ int gettimeofday(struct timeval *tv, struct timezone *tz) {
 	__sync_fetch_and_sub(&isRecursive, 1);
 	worker->activeContext = EXECTX_PTH;
         int rc = worker->ftable.gettimeofday(tv, tz);
-	tv->tv_sec += 1404101800; // Offset for a reasonable time!
+	tv->tv_sec += SHADOW_TIMER_OFFSET; // Offset for a reasonable time!
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
+}
+time_t time(time_t *timer) { 
+	_FTABLE_GUARD(time_t, time, timer); 
+	return worker->ftable.time(timer) + SHADOW_TIMER_OFFSET;
 }
 
 /**
@@ -1010,7 +1015,7 @@ int epoll_pwait(int epfd, struct epoll_event *events,
 
 #define _PTH_GUARD(rctype, func, ...) {				\
 		_FTABLE_GUARD(rctype, func, __VA_ARGS__);	\
-		assert(worker->activeContext == EXECTX_PLUGIN);\ 
+		assert(worker->activeContext == EXECTX_PLUGIN);	\
 		worker->activeContext = EXECTX_PTH;		\
 		rctype rc = _get_active_pthtable(worker)->pth_##func(__VA_ARGS__);	\
 		worker->activeContext = EXECTX_PLUGIN;		\
@@ -1500,9 +1505,29 @@ int pthread_setspecific(pthread_key_t key, const void *value)  {
 
 
 void *pthread_getspecific(pthread_key_t key) {
-	_FTABLE_GUARD(void *, pthread_getspecific, key);
+	if(__sync_fetch_and_add(&isRecursive, 1)) {
+		pthread_getspecific_fp real;
+		SETSYM_OR_FAIL(real, "pthread_getspecific");
+		void * rc = real(key);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return rc;
+	}
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	if (!worker) {
+		pthread_getspecific_fp real;
+		SETSYM_OR_FAIL(real, "pthread_getspecific");
+		void * rc = real(key);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return rc;
+	}
+	if (worker->activeContext != EXECTX_PLUGIN) {
+		void * rc = worker->ftable.pthread_getspecific(key);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return rc;
+	}
+	__sync_fetch_and_sub(&isRecursive, 1);
         worker->activeContext = EXECTX_PTH;
-        //real_fprintf(stderr, "pthread_getspecific:%d\n", key);
+        //real_fprintf(stderr, "pthread_getspecific:%dn", key);
 	void* pointer = NULL;
         pointer = _get_active_pthtable(worker)->pth_key_getdata((pth_key_t)key);
         worker->activeContext = EXECTX_PLUGIN;
@@ -1888,6 +1913,7 @@ static void _shadowtorpreload_cryptoTeardown() {
 /* SSL */
 int SSL_library_init() {
 	//_SHADOW_GUARD(int, SSL_library_init);
+        return 0;
 }
 void SSL_load_error_strings() {
 	// FIXME
@@ -1939,11 +1965,16 @@ const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_meth
 #endif
 
 typedef gpointer (*g_private_get_fp)(GPrivate *key);
+
+static g_private_get_fp real_g_private_get = NULL;
+
 gpointer g_private_get(GPrivate *key) {
+	if (!real_g_private_get) {
+		real_g_private_get = dlsym(RTLD_NEXT, "g_private_get");
+		assert(real_g_private_get);
+	}
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		g_private_get_fp real;
-		real = dlsym(RTLD_NEXT, "g_private_get");
-		gpointer rc = real(key);
+		gpointer rc = real_g_private_get(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
@@ -1951,6 +1982,7 @@ gpointer g_private_get(GPrivate *key) {
 	if (!worker) {
 		g_private_get_fp real;
 		real = dlsym(RTLD_NEXT, "g_private_get");
+		assert(real);
 		gpointer rc = real(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1958,8 +1990,10 @@ gpointer g_private_get(GPrivate *key) {
 	ExecutionContext e = worker->activeContext;
 	worker->activeContext = EXECTX_SHADOW;
 	g_private_get_fp real;
-	real = dlsym(RTLD_NEXT, "g_private_get");
-	gpointer rc = real(key);
+	//real = dlsym(RTLD_NEXT, "g_private_get");
+	//gpointer rc = real(key);
+	assert(real_g_private_get);
+	gpointer rc = real_g_private_get(key);
 	worker->activeContext = e;
 	__sync_fetch_and_sub(&isRecursive, 1);
 	return rc;
