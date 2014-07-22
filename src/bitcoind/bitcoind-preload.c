@@ -1532,11 +1532,15 @@ int pthread_setspecific(pthread_key_t key, const void *value)  {
 	return rc;
 }
 
-
 void *pthread_getspecific(pthread_key_t key) {
+	static pthread_getspecific_fp real_pthread_getspecific = NULL;
+	if (!real_pthread_getspecific) {
+		real_pthread_getspecific = dlsym(RTLD_NEXT, "pthread_getspecific");
+	}
+	assert(real_pthread_getspecific);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
 		pthread_getspecific_fp real;
-		SETSYM_OR_FAIL(real, "pthread_getspecific");
+		real = real_pthread_getspecific;
 		void * rc = real(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1544,7 +1548,7 @@ void *pthread_getspecific(pthread_key_t key) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
 		pthread_getspecific_fp real;
-		SETSYM_OR_FAIL(real, "pthread_getspecific");
+		real = real_pthread_getspecific;
 		void * rc = real(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
