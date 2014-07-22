@@ -1293,7 +1293,34 @@ int gethostbyaddr_r(const void *addr, socklen_t len, gint type,
 
 int rand() _SHADOW_GUARD(int, rand);
 int rand_r(unsigned int *seedp) _SHADOW_GUARD(int, rand_r, seedp);
-void srand(unsigned int seed) { assert(0); }
+void srand(unsigned int seed) {
+	if(__sync_fetch_and_add(&isRecursive, 1)) {
+		srand_fp real;
+		SETSYM_OR_FAIL(real, "srand");
+		real(seed);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return;
+	}
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	if (!worker) {
+		srand_fp real;
+		SETSYM_OR_FAIL(real, "srand");
+		real(seed);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return;
+	}
+	if (worker->activeContext != EXECTX_PLUGIN) {
+		worker->ftable.srand(seed);
+		__sync_fetch_and_sub(&isRecursive, 1);
+		return;
+	}
+	__sync_fetch_and_sub(&isRecursive, 1);
+	worker->activeContext = EXECTX_PTH;
+	worker->ftable.srand(seed);
+	worker->activeContext = EXECTX_PLUGIN;
+	return;
+}
+
 long int random() { assert(0); }
 int random_r(struct random_data *buf, int32_t *result) { assert(0); }
 void srandom(unsigned int seed) {
