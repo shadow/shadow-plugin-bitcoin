@@ -702,7 +702,9 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_WORKER_SET(realloc);
 	_WORKER_SET(posix_memalign);
 	_WORKER_SET(memalign);
+#if 0
 	_WORKER_SET(aligned_alloc);
+#endif
 	_WORKER_SET(valloc);
 	_WORKER_SET(pvalloc);
 	_WORKER_SET(free);
