@@ -513,17 +513,16 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 #define SETSYM_OR_FAIL_V(funcptr, funcstr, version) SETSYM_OR_FAIL_V_(RTLD_NEXT, funcptr, funcstr, version)
 
 #define _FTABLE_GUARD(rctype, func, ...)       \
+    static func##_fp real = NULL;	       \
+    if (!real) SETSYM_OR_FAIL(real, #func);    \
+    assert(real);			       \
     if(__sync_fetch_and_add(&isRecursive, 1)) {\
-	    func##_fp real;\
-	    SETSYM_OR_FAIL(real, #func);\
 	    rctype rc = real(__VA_ARGS__);\
 	    __sync_fetch_and_sub(&isRecursive, 1);\
             return rc;\
     }\
     BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);\
     if (!worker) {\
-	    func##_fp real;\
-	    SETSYM_OR_FAIL(real, #func);\
 	    rctype rc = real(__VA_ARGS__);\
             __sync_fetch_and_sub(&isRecursive, 1);\
 	    return rc;\
@@ -532,6 +531,28 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	    rctype rc = worker->ftable.func(__VA_ARGS__);\
 	    __sync_fetch_and_sub(&isRecursive, 1);\
 	    return rc;\
+    }\
+    __sync_fetch_and_sub(&isRecursive, 1);\
+
+#define _FTABLE_GUARD_VOID(func, ...)          \
+    static func##_fp real = NULL;	       \
+    if (!real) SETSYM_OR_FAIL(real, #func);    \
+    assert(real);			       \
+    if(__sync_fetch_and_add(&isRecursive, 1)) {\
+	    real(__VA_ARGS__);\
+	    __sync_fetch_and_sub(&isRecursive, 1);\
+            return;\
+    }\
+    BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);\
+    if (!worker) {\
+	    real(__VA_ARGS__);\
+            __sync_fetch_and_sub(&isRecursive, 1);\
+	    return;\
+    }\
+    if (worker->activeContext != EXECTX_PLUGIN) {\
+	    worker->ftable.func(__VA_ARGS__);\
+	    __sync_fetch_and_sub(&isRecursive, 1);\
+	    return;\
     }\
     __sync_fetch_and_sub(&isRecursive, 1);\
 
@@ -564,6 +585,15 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 		rctype rc = worker->ftable.func(__VA_ARGS__);	\
 		worker->activeContext = EXECTX_PLUGIN;		\
 		return rc;					\
+	}							\
+
+
+#define _SHADOW_GUARD_VOID(func, ...) {			\
+		_FTABLE_GUARD_VOID(func, __VA_ARGS__);	\
+		worker->activeContext = EXECTX_PTH;		\
+		worker->ftable.func(__VA_ARGS__);	\
+		worker->activeContext = EXECTX_PLUGIN;		\
+		return;					\
 	}							\
 
 #define _SHD_DL_BODY(rctype, func, ...)					\
@@ -880,7 +910,12 @@ void bitcoindpreload_setPthContext() {
 	worker->activeContext = EXECTX_PTH;
 }
 
-int CLogPrintStr(const char *str) _SHADOW_GUARD(int, CLogPrintStr, str);
+int CLogPrintStr(const char *str) {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	assert(worker);
+	assert(worker->activeContext == EXECTX_PLUGIN);
+	return worker->ftable.CLogPrintStr(str);
+}
 
 ssize_t write(int fp, const void *d, size_t s) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
@@ -889,7 +924,6 @@ ssize_t write(int fp, const void *d, size_t s) {
 
 	if(worker && worker->activeContext == EXECTX_PLUGIN) {
 		real_fprintf(stderr, "write: going to pth fd:%d\n", fp);
-		//assert(0);
 		assert(_get_active_pthtable(worker)->pth_write);
 		worker->activeContext = EXECTX_PTH;
 		rc = _get_active_pthtable(worker)->pth_write(fp, d, s);
@@ -1057,17 +1091,16 @@ ssize_t pwrite(int fd, const void *buf, size_t nbytes, off_t offset) { assert(0)
 int fcntl(int fd, int cmd, ...) {
 	va_list farg;
 	va_start(farg, cmd);
+	fcntl_fp real = NULL;
+	if (!real) SETSYM_OR_FAIL(real, "fcntl");
+	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		fcntl_fp real;
-		SETSYM_OR_FAIL(real, "fcntl");
 		int rc = real(fd, cmd, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		fcntl_fp real;
-		SETSYM_OR_FAIL(real, "fcntl");
 		int rc = real(fd, cmd, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1087,17 +1120,16 @@ int fcntl(int fd, int cmd, ...) {
 int ioctl(int fd, unsigned long int request, ...) {
 	va_list farg;
 	va_start(farg, request);
+	static ioctl_fp real = NULL;
+	if (!real) SETSYM_OR_FAIL(real, "ioctl");
+	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		ioctl_fp real;
-		SETSYM_OR_FAIL(real, "ioctl");
 		int rc = real(fd, request, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		ioctl_fp real;
-		SETSYM_OR_FAIL(real, "ioctl");
 		int rc = real(fd, request, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1140,17 +1172,16 @@ int fileno(FILE *stream) _SHADOW_GUARD(int, fileno, stream);
 int open(const char *pathname, int flags, ...) {
 	va_list farg;
 	va_start(farg, flags);
+	static open_fp real = NULL;
+	if (!real) SETSYM_OR_FAIL(real, "open");
+	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		open_fp real;
-		SETSYM_OR_FAIL(real, "open");
 		int rc = real(pathname, flags, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		open_fp real;
-		SETSYM_OR_FAIL(real, "open");
 		int rc = real(pathname, flags, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1170,17 +1201,16 @@ int open(const char *pathname, int flags, ...) {
 int open64(const char *pathname, int flags, ...) {
 	va_list farg;
 	va_start(farg, flags);
+	static open64_fp real = NULL;
+	if (!real) SETSYM_OR_FAIL(real, "open64");
+	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		open64_fp real;
-		SETSYM_OR_FAIL(real, "open64");
 		int rc = real(pathname, flags, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		open64_fp real;
-		SETSYM_OR_FAIL(real, "open64");
 		int rc = real(pathname, flags, va_arg(farg, mode_t));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
@@ -1238,33 +1268,7 @@ int gethostname(char* name, size_t len) _SHADOW_GUARD(int, gethostname, name, le
 int getaddrinfo(const char *name, const char *service,
 		const struct addrinfo *hints, struct addrinfo **res)
 	_SHADOW_GUARD(int, getaddrinfo, name, service, hints, res);
-void freeaddrinfo(struct addrinfo *res) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		freeaddrinfo_fp real;
-		SETSYM_OR_FAIL(real, "freeaddrinfo");
-		real(res);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		freeaddrinfo_fp real;
-		SETSYM_OR_FAIL(real, "freeaddrinfo");
-		real(res);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		worker->ftable.freeaddrinfo(res);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
-	worker->activeContext = EXECTX_PTH;
-	worker->ftable.freeaddrinfo(res);
-	worker->activeContext = EXECTX_PLUGIN;
-	return;
-}
+void freeaddrinfo(struct addrinfo *res) _SHADOW_GUARD_VOID(freeaddrinfo, res);
 int getnameinfo(const struct sockaddr* sa, socklen_t salen,
 		char * host, socklen_t hostlen, char *serv, socklen_t servlen,
 #if (__GLIBC__ > 2 || (__GLIBC__ == 2 && (__GLIBC_MINOR__ < 2 || __GLIBC_MINOR__ > 13)))
@@ -1295,63 +1299,11 @@ int gethostbyaddr_r(const void *addr, socklen_t len, gint type,
 
 int rand() _SHADOW_GUARD(int, rand);
 int rand_r(unsigned int *seedp) _SHADOW_GUARD(int, rand_r, seedp);
-void srand(unsigned int seed) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		srand_fp real;
-		SETSYM_OR_FAIL(real, "srand");
-		real(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		srand_fp real;
-		SETSYM_OR_FAIL(real, "srand");
-		real(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		worker->ftable.srand(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
-	worker->activeContext = EXECTX_PTH;
-	worker->ftable.srand(seed);
-	worker->activeContext = EXECTX_PLUGIN;
-	return;
-}
+void srand(unsigned int seed) _SHADOW_GUARD_VOID(srand, seed);
 
 long int random() { assert(0); }
 int random_r(struct random_data *buf, int32_t *result) { assert(0); }
-void srandom(unsigned int seed) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		srandom_fp real;
-		SETSYM_OR_FAIL(real, "srandom");
-		real(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		srandom_fp real;
-		SETSYM_OR_FAIL(real, "srandom");
-		real(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		worker->ftable.srandom(seed);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
-	worker->activeContext = EXECTX_PTH;
-	worker->ftable.srandom(seed);
-	worker->activeContext = EXECTX_PLUGIN;
-	return;
-}
+void srandom(unsigned int seed) _SHADOW_GUARD_VOID(srandom, seed);
 int srandom_r(unsigned int seed, struct random_data *buf) { assert(0); }
 
 
@@ -1361,33 +1313,7 @@ int srandom_r(unsigned int seed, struct random_data *buf) { assert(0); }
 void* malloc(size_t size) _SHADOW_GUARD(void*, malloc, size);
 //void* calloc(size_t nmemb, size_t size) _SHADOW_GUARD(void*, calloc, nmemb, size);
 void* realloc(void *ptr, size_t size) _SHADOW_GUARD(void*, realloc, ptr, size);
-void free(void *ptr) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		free_fp real;
-		SETSYM_OR_FAIL(real, "free");
-		real(ptr);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		free_fp real;
-		SETSYM_OR_FAIL(real, "free");
-		real(ptr);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		worker->ftable.free(ptr);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
-	worker->activeContext = EXECTX_PTH;
-	worker->ftable.free(ptr);
-	worker->activeContext = EXECTX_PLUGIN;
-	return;
-}
+void free(void *ptr) _SHADOW_GUARD_VOID(free, ptr);
 
 int posix_memalign(void** memptr, size_t alignment, size_t size) _SHADOW_GUARD(int, posix_memalign, memptr, alignment, size);
 void* memalign(size_t blocksize, size_t bytes) _SHADOW_GUARD(void*, memalign, blocksize, bytes);
@@ -1954,33 +1880,7 @@ void SSL_load_error_strings() {
 void __do_global_dtors_aux() {
 }
 void RAND_seed(const void *buf, int num) { assert(0); }
-void RAND_add(const void *buf, int num, double entropy) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		RAND_add_fp real;
-		SETSYM_OR_FAIL(real, "RAND_add");
-		real(buf, num, entropy);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		RAND_add_fp real;
-		SETSYM_OR_FAIL(real, "RAND_add");
-		real(buf, num, entropy);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		worker->ftable.RAND_add(buf, num, entropy);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
-	worker->activeContext = EXECTX_PTH;
-	worker->ftable.RAND_add(buf, num, entropy);
-	worker->activeContext = EXECTX_PLUGIN;
-	return;
-}
+void RAND_add(const void *buf, int num, double entropy) _SHADOW_GUARD_VOID(RAND_add, buf, num, entropy);
 int RAND_poll() { assert(0); }
 int RAND_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_bytes, buf, num);
 int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseudo_bytes, buf, num);
@@ -1999,34 +1899,24 @@ const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_meth
 
 typedef gpointer (*g_private_get_fp)(GPrivate *key);
 
-static g_private_get_fp real_g_private_get = NULL;
-
 gpointer g_private_get(GPrivate *key) {
-	if (!real_g_private_get) {
-		real_g_private_get = dlsym(RTLD_NEXT, "g_private_get");
-		assert(real_g_private_get);
-	}
+	static g_private_get_fp real = NULL;
+	if (!real) SETSYM_OR_FAIL(real, "g_private_get");
+	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		gpointer rc = real_g_private_get(key);
+		gpointer rc = real(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = pluginWorkerKey;
 	if (!worker) {
-		g_private_get_fp real;
-		real = dlsym(RTLD_NEXT, "g_private_get");
-		assert(real);
 		gpointer rc = real(key);
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	ExecutionContext e = worker->activeContext;
 	worker->activeContext = EXECTX_SHADOW;
-	g_private_get_fp real;
-	//real = dlsym(RTLD_NEXT, "g_private_get");
-	//gpointer rc = real(key);
-	assert(real_g_private_get);
-	gpointer rc = real_g_private_get(key);
+	gpointer rc = real(key);
 	worker->activeContext = e;
 	__sync_fetch_and_sub(&isRecursive, 1);
 	return rc;
