@@ -24,6 +24,7 @@ def main():
     ap.add_argument('-c', '--compress', action="store", dest="compress", help="use N xz threads to compress the logfile inline", metavar="N", default=0)
     ap.add_argument('-r', '--reset', action="store_true", dest="reset", help="reset data directory and exit", default=False)
     ap.add_argument('-y', '--assume-yes', action="store_true", dest="clear", help="don't ask before resetting data directory", default=False)
+    ap.add_argument('-t', '--tee', action="store_true", dest="tee", help="print log file to console", default=False)
     
     # get arguments, accessible with args.value
     args, unknown_args = ap.parse_known_args()
@@ -81,8 +82,12 @@ def main():
         xz_p.stdin.close()
         xz_p.wait()
     else:
-        with open(logpath, 'wb') as f:
-            retcode = subprocess.call(cmd.split(), cwd=args.output, stdout=f)
+        if args.tee:
+            cmd += " | tee {0}".format(logpath)
+            retcode = subprocess.call(cmd, cwd=args.output, shell=True)
+        else:
+            with open(logpath, 'wb') as f:
+                retcode = subprocess.call(cmd.split(), cwd=args.output, stdout=f)
     
     end = datetime.now()
 
@@ -114,8 +119,13 @@ def query_yes_no(question, default="yes"):
 
 def reset(output):
     if os.path.exists(output+"/data"): shutil.rmtree(output+"/data")
-    shutil.copytree(output+"/initdata", output+"/data")
-    return 0
+    os.mkdir(output+"/data")
+    os.symlink(output+"/initdata/pristine", output+"/data/pristine")
+    #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin1", symlinks=True)
+    #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin2", symlinks=True)
+    for i in range(1,7):
+        shutil.copytree(output+"/initdata/dotbitcoin_template_300k", output+"/data/.bitcoin%d" % i, symlinks=True)
+        #shutil.copy(output+"/snapshot.dat", output+"/data/.bitcoin1/snapshot.dat")
 
 def log(msg):
     color_start_code = "\033[94m" # red: \033[91m"

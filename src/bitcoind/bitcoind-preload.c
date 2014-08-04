@@ -969,12 +969,9 @@ int close(int fd) _SHADOW_GUARD(int, close, fd);
 
 int usleep(unsigned int usec) {
 	BitcoindPreloadWorker* worker_ = g_private_get(&pluginWorkerKey);
-	_get_active_pthtable(worker_)->pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
-	real_fprintf(stderr, "usleep: activeContext:%d\n", worker_->activeContext);
 	_FTABLE_GUARD(int, usleep, usec);
         worker->activeContext = EXECTX_PTH;
-	real_fprintf(stderr, "about to pth_sleep\n");
-	_get_active_pthtable(worker)->pth_ctrl(PTH_CTRL_DUMPSTATE, stderr);
+	real_fprintf(stderr, "about to pth_usleep\n");
 	int rc = _get_active_pthtable(worker)->pth_usleep(usec);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
