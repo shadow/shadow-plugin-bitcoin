@@ -5,6 +5,9 @@ find_package(RT REQUIRED)
 find_package(DL REQUIRED)
 find_package(GLIB REQUIRED)
 
+#add_cflags(-fsanitize=address)
+#add_cxxflags(-fsanitize=address)
+
 # threads - set options BEFORE find_package()
 set(CMAKE_THREAD_PREFER_PTHREAD ON)  
 find_package(Threads REQUIRED)
@@ -81,6 +84,51 @@ set(boost_sources
 )
 
 #===================================================================
+# libev
+#===================================================================
+set(libev_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/libev-4.15)
+include_directories(${libev_ROOT_DIR}/)
+set(libev_SOURCES
+	${libev_ROOT_DIR}/ev.c
+	${libev_ROOT_DIR}/event.c
+)
+add_bitcode(shadow-libev-bitcode ${libev_SOURCES})
+
+#===================================================================
+# littonizer
+#===================================================================
+set(netmine_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine)
+include_directories(${netmine_ROOT_DIR}/shared/includes ${netmine_ROOT_DIR}/connector/includes)
+
+set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
+set(netmine_shared_SOURCES
+	${netmine_shared_ROOT_DIR}/src/network.cpp
+	${netmine_shared_ROOT_DIR}/src/config.cpp
+	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/alloc_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/mmap_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/read_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/write_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/bitcoin.cpp
+	${netmine_shared_ROOT_DIR}/src/crypto.cpp
+	${netmine_shared_ROOT_DIR}/src/iobuf.cpp
+	${netmine_shared_ROOT_DIR}/src/logger.cpp
+)
+
+set(netmine_connector_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/connector)
+set(netmine_connector_SOURCES
+	${netmine_connector_ROOT_DIR}/src/bitcoin_handler.cpp
+	${netmine_connector_ROOT_DIR}/src/command_handler.cpp
+	${netmine_connector_ROOT_DIR}/src/connector_main.cpp
+)
+
+#add_bitcode(shadow-netmine-shared-bitcode ${netmine_shared_SOURCES})
+#set_target_properties(shadow-netmine-shared-bitcode PROPERTIES COMPILE_FLAGS "-std=c++11")
+#add_bitcode(shadow-netmine-connector-bitcode ${netmine_connector_SOURCES})
+#set_target_properties(shadow-netmine-connector-bitcode PROPERTIES COMPILE_FLAGS "-std=c++11")
+
+
+#===================================================================
 # picocoin
 #===================================================================
 set(picocoin_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/picocoin)
@@ -118,6 +166,7 @@ set(picocoin_SOURCES
 	${picocoin_ROOT_DIR}/lib/utxo.c
 )
 add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
+
 
 #===================================================================
 # bitcoin
@@ -392,3 +441,6 @@ target_link_libraries(shadow-preload-bitcoind
 )
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)
 
+
+add_executable(injector injector/injector-main.c injector/injector.c ${picocoin_SOURCES})
+target_link_libraries(injector ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${GLIB_LIBRARIES} -lm)

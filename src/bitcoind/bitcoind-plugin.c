@@ -21,11 +21,11 @@ static GList* cxa_atexit_queue = NULL;
 typedef int (*bitcoind_logprintstr_fp)(const char*);
 int CLogPrintStr(const char *s) {
   //real_fprintf(stderr, "%s", s);
-  uint len = strlen(s);
+  uint len = strlen(s)+1;
   if (!len) return 0;
-  char *buf = malloc(strlen(s));
+  char *buf = malloc(len);
   strncpy(buf, s, len);
-  if (buf[len-1] == '\n') buf[len-1] = '\0';
+  if (buf[len-2] == '\n') buf[len-2] = '\0';
   bitcoindpreload_setShadowContext();
   shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "%s", buf);
   bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
