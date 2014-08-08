@@ -154,6 +154,13 @@ static void injectorplugin_new(int argc, char* argv[]) {
 	pth_t t = pth_spawn(PTH_ATTR_DEFAULT, (void *(*)(void*))&_injector_new, &args);
 	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 
+	// Invalid write, just to see if valgrind is paying attention
+	int *data = malloc(17);
+	//data[5] = 9;
+	//free(data);
+	//data[3] = 9;
+	//exit(1);
+
 	// Jog the threads once
 	injectorplugin_ready();
 

@@ -145,6 +145,24 @@ typedef int (*flock_fp)(int fd, int operation);
 typedef int (*ftruncate_fp)(int fd, int length);
 typedef int (*posix_fallocate_fp)(int fd, off_t offset, off_t len);
 typedef int (*fsync_fp)(int fd);
+typedef size_t (*fread_fp)(void *ptr, size_t size, size_t nmemb, FILE *stream);
+typedef size_t (*fread_unlocked_fp)(void *ptr, size_t size, size_t nmemb, FILE *stream);
+typedef size_t (*fwrite_fp)(const void *ptr, size_t size, size_t nmemb, FILE *stream);  
+typedef size_t (*fwrite_unlocked_fp)(const void *ptr, size_t size, size_t nmemb, FILE *stream);  
+typedef int (*fflush_fp)(FILE * stream);
+typedef int (*fflush_unlocked_fp)(FILE * stream);
+typedef int (*fseek_fp)(FILE *stream, long offset, int whence);
+typedef long (*ftell_fp)(FILE *stream);
+typedef void (*rewind_fp)(FILE *stream);
+typedef int (*fgetpos_fp)(FILE *stream, fpos_t *pos);
+typedef int (*fsetpos_fp)(FILE *stream, const fpos_t *pos);
+typedef int (*feof_fp)(FILE *stream);
+typedef int (*ferror_fp)(FILE *stream);
+typedef void (*setbuf_fp)( FILE * stream, char * buffer);
+typedef int (*setvbuf_fp)( FILE * stream, char * buffer, int mode, size_t size);
+typedef FILE * (*freopen_fp)( const char * filename, const char * mode, FILE * stream);
+typedef int (*fdatasync_fp)(int fd);
+
 
 
 /* name/address family */
@@ -367,6 +385,20 @@ struct _FunctionTable {
 	__FUNC_TABLE_ENTRY(fsync);
 	__FUNC_TABLE_ENTRY(ftruncate);
 	__FUNC_TABLE_ENTRY(posix_fallocate);
+	__FUNC_TABLE_ENTRY(fflush);
+	__FUNC_TABLE_ENTRY(fflush_unlocked);
+	__FUNC_TABLE_ENTRY(fread);
+	__FUNC_TABLE_ENTRY(fread_unlocked);
+	__FUNC_TABLE_ENTRY(fwrite);
+	__FUNC_TABLE_ENTRY(fwrite_unlocked);
+	__FUNC_TABLE_ENTRY(ftell);
+	__FUNC_TABLE_ENTRY(fseek);
+	__FUNC_TABLE_ENTRY(feof);
+	__FUNC_TABLE_ENTRY(ferror);
+	__FUNC_TABLE_ENTRY(setbuf);
+	__FUNC_TABLE_ENTRY(setvbuf);
+	__FUNC_TABLE_ENTRY(freopen);
+	__FUNC_TABLE_ENTRY(fdatasync);
 
 	/* name/address family */
 	__FUNC_TABLE_ENTRY(gethostname);
@@ -611,6 +643,12 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 int shd_dl_sigprocmask(int how, const sigset_t *set, sigset_t *oset) {
 	return sigprocmask(how, set, oset);
 }
+/*
+int sigfillset(sigset_t *set) { return 0; }
+int sigaddset(sigset_t *set, int signum) { return 0; }
+int sigdelset(sigset_t *set, int signum) { return 0; }
+int sigismember(const sigset_t *set, int signum) { return 0; }
+*/
 
 int __cxa_atexit(void (*f)(void*), void * arg, void * dso_handle) {
 	_FTABLE_GUARD(int, __cxa_atexit, f, arg, dso_handle);
@@ -785,6 +823,21 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_WORKER_SET(fsync);
 	_WORKER_SET(ftruncate);
 	_WORKER_SET(posix_fallocate);
+	_WORKER_SET(fflush);
+	_WORKER_SET(fflush_unlocked);
+	_WORKER_SET(fread);
+	_WORKER_SET(fread_unlocked);
+	_WORKER_SET(fwrite);
+	_WORKER_SET(fwrite_unlocked);
+	_WORKER_SET(ftell);
+	_WORKER_SET(fseek);
+	_WORKER_SET(feof);
+	_WORKER_SET(ferror);
+	_WORKER_SET(setbuf);
+	_WORKER_SET(setvbuf);
+	_WORKER_SET(freopen);
+	_WORKER_SET(fdatasync);
+
 
 	/* socket/io family */
 	_WORKER_SET(socket);
@@ -1258,7 +1311,24 @@ int faccessat(int dirfd, const char *pathname, int mode, int flags) { assert(0);
 int unlinkat(int dirfd, const char *pathname, int flags) { assert(0); }
 int fchmodat(int dirfd, const char *pathname, mode_t mode, int flags) { assert(0); }
 int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group, int flags) { assert(0); }
-
+/*
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fread, ptr, size, nmemb, stream);
+size_t fread_unlocked(void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fread_unlocked, ptr, size, nmemb, stream);
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fwrite, ptr, size, nmemb, stream);
+size_t fwrite_unlocked(const void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fwrite_unlocked, ptr, size, nmemb, stream);
+int fflush(FILE * stream) _SHADOW_GUARD(int, fflush, stream);
+int fflush_unlocked(FILE * stream) _SHADOW_GUARD(int, fflush_unlocked, stream);
+int fseek(FILE *stream, long offset, int whence) _SHADOW_GUARD(int, fseek, stream, offset, whence);
+long ftell(FILE *stream) _SHADOW_GUARD(long, ftell, stream);
+void rewind(FILE *stream) { assert(0); }
+int fgetpos(FILE *stream, fpos_t *pos) { assert(0); }
+int fsetpos(FILE *stream, const fpos_t *pos) { assert(0); }
+int feof(FILE *stream) _SHADOW_GUARD(int, feof, stream);
+int ferror(FILE *stream) { assert(0); }
+void setbuf ( FILE * stream, char * buffer ) { assert(0); }
+int setvbuf ( FILE * stream, char * buffer, int mode, size_t size ) _SHADOW_GUARD(int, setvbuf, stream, buffer, mode, size);
+FILE * freopen ( const char * filename, const char * mode, FILE * stream ) { assert(0); }
+*/
 /* name/address family */
 
 
@@ -1327,7 +1397,8 @@ void* aligned_alloc(size_t alignment, size_t size) { assert(0); }
 void* valloc(size_t size) _SHADOW_GUARD(void*, valloc, size);
 void* pvalloc(size_t size) _SHADOW_GUARD(void*, pvalloc, size);
 void* mmap(void *addr, size_t length, int prot, int flags,
-		   int fd, off_t offset) _SHADOW_GUARD(void*, mmap, addr, length, prot, flags, fd, offset);
+	   int fd, off_t offset) _SHADOW_GUARD(void*, mmap, addr, length, prot, flags, fd, offset);
+int munmap(void *addr, size_t length) { return 0; };
 
 
 /* pth context keeping track of */

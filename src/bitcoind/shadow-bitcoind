@@ -123,7 +123,7 @@ def reset(output):
     os.symlink(output+"/initdata/pristine", output+"/data/pristine")
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin1", symlinks=True)
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin2", symlinks=True)
-    for i in range(1,7):
+    for i in range(1,2):
         shutil.copytree(output+"/initdata/dotbitcoin_template_300k", output+"/data/.bitcoin%d" % i, symlinks=True)
         #shutil.copy(output+"/snapshot.dat", output+"/data/.bitcoin1/snapshot.dat")
 
