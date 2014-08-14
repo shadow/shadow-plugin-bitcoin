@@ -495,6 +495,8 @@ struct _BitcoindPreloadWorker {
 	FunctionTable ftable;
 	PthTable bitcoind_pthtable;
 	PthTable injector_pthtable;
+	PthTable netmine_connector_pthtable;
+	PthTable netmine_logserver_pthtable;
 	unsigned long isRecursive;
 };
 
@@ -504,6 +506,8 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	switch (worker->activePlugin) {
 	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
 	case PLUGIN_INJECTOR: return &worker->injector_pthtable;
+	case PLUGIN_NETMINE_CONNECTOR: return &worker->netmine_connector_pthtable;
+	case PLUGIN_NETMINE_LOGSERVER: return &worker->netmine_logserver_pthtable;
 	}
 	assert(0);
 	return 0;
@@ -556,7 +560,7 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
             return rc;\
     }\
     BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);\
-    if (!worker) {\
+    if (!worker || (worker->activeContext != EXECTX_PLUGIN /*&& worker->activeContext != EXECTX_PTH*/)) { \
 	    rctype rc = real(__VA_ARGS__);\
             __sync_fetch_and_sub(&isRecursive, 1);\
 	    return rc;\
@@ -591,17 +595,16 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
     __sync_fetch_and_sub(&isRecursive, 1);\
 
 #define _FTABLE_GUARD_V(rctype, func, version, ...)	\
+    static func##_fp real = NULL;	       \
+    if (!real) SETSYM_OR_FAIL_V(real, #func, version); \
+    assert(real);			       \
     if(__sync_fetch_and_add(&isRecursive, 1)) {\
-	    func##_fp real;\
-	    SETSYM_OR_FAIL_V(real, #func, version);	\
 	    rctype rc = real(__VA_ARGS__);\
 	    __sync_fetch_and_sub(&isRecursive, 1);\
             return rc;\
     }\
     BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);\
     if (!worker) {\
-	    func##_fp real;\
-	    SETSYM_OR_FAIL_V(real, #func, version);	\
 	    rctype rc = real(__VA_ARGS__);\
             __sync_fetch_and_sub(&isRecursive, 1);\
 	    return rc;\
@@ -788,6 +791,10 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
 	} else if (g_str_has_suffix(module_name, "injector.so")) {
 		_PTH_WORKERS(injector);
+	} else if (g_str_has_suffix(module_name, "connector.so")) {
+		_PTH_WORKERS(netmine_connector);
+	} else if (g_str_has_suffix(module_name, "logserver.so")) {
+		_PTH_WORKERS(netmine_logserver);
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
@@ -1092,8 +1099,7 @@ int epoll_create1(int flags) _SHADOW_GUARD(int, epoll_create1, flags);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) 
 	_SHADOW_GUARD(int, epoll_ctl, epfd, op, fd, event)
 int epoll_wait(int epfd, struct epoll_event *events,
-	       int maxevents, int timeout) 
-	_SHADOW_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
+	       int maxevents, int timeout) _SHADOW_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
 int epoll_pwait(int epfd, struct epoll_event *events,
 		int maxevents, int timeout, const sigset_t *ss) 
 	_SHADOW_GUARD(int, epoll_pwait, epfd, events, maxevents, timeout, ss);
@@ -1147,24 +1153,24 @@ int fcntl(int fd, int cmd, ...) {
 	if (!real) SETSYM_OR_FAIL(real, "fcntl");
 	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		int rc = real(fd, cmd, va_arg(farg, mode_t));
+		int rc = real(fd, cmd, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		int rc = real(fd, cmd, va_arg(farg, mode_t));
+		int rc = real(fd, cmd, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	if (worker->activeContext != EXECTX_PLUGIN) {
-		int rc = worker->ftable.fcntl(fd, cmd, va_arg(farg, mode_t));
+		int rc = worker->ftable.fcntl(fd, cmd, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	__sync_fetch_and_sub(&isRecursive, 1);
 	worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.fcntl(fd, cmd, va_arg(farg, mode_t));
+	int rc = worker->ftable.fcntl(fd, cmd, va_arg(farg, void *));
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -1176,24 +1182,24 @@ int ioctl(int fd, unsigned long int request, ...) {
 	if (!real) SETSYM_OR_FAIL(real, "ioctl");
 	assert(real);
 	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		int rc = real(fd, request, va_arg(farg, mode_t));
+		int rc = real(fd, request, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
 	if (!worker) {
-		int rc = real(fd, request, va_arg(farg, mode_t));
+		int rc = real(fd, request, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	if (worker->activeContext != EXECTX_PLUGIN) {
-		int rc = worker->ftable.ioctl(fd, request, va_arg(farg, mode_t));
+		int rc = worker->ftable.ioctl(fd, request, va_arg(farg, void *));
 		__sync_fetch_and_sub(&isRecursive, 1);
 		return rc;
 	}
 	__sync_fetch_and_sub(&isRecursive, 1);
 	worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.ioctl(fd, request, va_arg(farg, mode_t));
+	int rc = worker->ftable.ioctl(fd, request, va_arg(farg, void *));
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -1295,10 +1301,11 @@ int ftruncate(int fd, off_t length) _SHADOW_GUARD(int, ftruncate, fd, length);
 //TODO
 //int fstatvfs(int fd, struct statvfs *buf);
 //
+
 int fsync(int fd) _SHADOW_GUARD(int, fsync, fd);
 int fdatasync(int fd) { return fsync(fd); }
 int syncfs(int fd) { assert(0); }
-int fallocate(int fd, int mode, off_t offset, off_t len) { assert(0); }
+//int fallocate(int fd, int mode, off_t offset, off_t len) { assert(0); } //_SHADOW_GUARD(int, fallocate, fd);
 int fexecve(int fd, char *const argv[], char *const envp[]) { assert(0); }
 long fpathconf(int fd, int name) { assert(0); }
 int fchdir(int fd) { assert(0); }
@@ -1311,6 +1318,7 @@ int faccessat(int dirfd, const char *pathname, int mode, int flags) { assert(0);
 int unlinkat(int dirfd, const char *pathname, int flags) { assert(0); }
 int fchmodat(int dirfd, const char *pathname, mode_t mode, int flags) { assert(0); }
 int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group, int flags) { assert(0); }
+
 /*
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fread, ptr, size, nmemb, stream);
 size_t fread_unlocked(void *ptr, size_t size, size_t nmemb, FILE *stream) _SHADOW_GUARD(size_t, fread_unlocked, ptr, size, nmemb, stream);
@@ -1449,6 +1457,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		}
 	}
 	real_fprintf(stderr, "returning from pth_pthread_create\n");
+	assert(rc == 0);
 	worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }
@@ -1598,10 +1607,33 @@ int PTHREAD_MUTEX_IS_INITIALIZED(pthread_mutex_t mutex) {
 	//return !strncmp((const char *)&mutex, (const char *)&empty, sizeof(pthread_mutex_t));
 }
 
-
 int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr) 
 {
-	_FTABLE_GUARD_V(int, pthread_cond_init, "GLIBC_2.3.2", cond, attr);
+    static pthread_cond_init_fp real = NULL;	       
+    if (!real) SETSYM_OR_FAIL_V(real, "pthread_cond_init", "GLIBC_2.3.2"); 
+    assert(real);			       
+    if(__sync_fetch_and_add(&isRecursive, 1)) {
+	    int rc = real(cond, attr);
+	    __sync_fetch_and_sub(&isRecursive, 1);
+            return rc;
+    }
+    BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+    if (!worker || worker->activeContext == EXECTX_NONE) {
+	    int rc = real(cond, attr);
+	    assert(rc == 0);
+            __sync_fetch_and_sub(&isRecursive, 1);
+	    return rc;
+    }
+    if (worker->activeContext != EXECTX_PLUGIN) {
+	    int rc = worker->ftable.pthread_cond_init(cond, attr);
+	    assert(rc == 0);
+	    __sync_fetch_and_sub(&isRecursive, 1);
+	    return rc;
+    }
+    __sync_fetch_and_sub(&isRecursive, 1);
+
+    //_FTABLE_GUARD_V(int, pthread_cond_init, "GLIBC_2.3.2", cond, attr);
+        //_FTABLE_GUARD(int, pthread_cond_init, cond, attr);
         worker->activeContext = EXECTX_PTH;
 	int rc = 0;
 	_get_active_pthtable(worker)->pth_init();
@@ -1609,6 +1641,7 @@ int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
 		rc = EINVAL;
 	else if (!_get_active_pthtable(worker)->pth_cond_init((pth_cond_t *)cond))
 		rc = errno;
+	assert(rc == 0);
         worker->activeContext = EXECTX_PLUGIN;
 	return rc;
 }

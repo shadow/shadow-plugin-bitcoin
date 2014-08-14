@@ -5,8 +5,6 @@ find_package(RT REQUIRED)
 find_package(DL REQUIRED)
 find_package(GLIB REQUIRED)
 
-#add_cflags(-fsanitize=address)
-#add_cxxflags(-fsanitize=address)
 
 # threads - set options BEFORE find_package()
 set(CMAKE_THREAD_PREFER_PTHREAD ON)  
@@ -93,39 +91,6 @@ set(libev_SOURCES
 	${libev_ROOT_DIR}/event.c
 )
 add_bitcode(shadow-libev-bitcode ${libev_SOURCES})
-
-#===================================================================
-# littonizer
-#===================================================================
-set(netmine_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine)
-include_directories(${netmine_ROOT_DIR}/shared/includes ${netmine_ROOT_DIR}/connector/includes)
-
-set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
-set(netmine_shared_SOURCES
-	${netmine_shared_ROOT_DIR}/src/network.cpp
-	${netmine_shared_ROOT_DIR}/src/config.cpp
-	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/alloc_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/mmap_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/read_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/write_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/bitcoin.cpp
-	${netmine_shared_ROOT_DIR}/src/crypto.cpp
-	${netmine_shared_ROOT_DIR}/src/iobuf.cpp
-	${netmine_shared_ROOT_DIR}/src/logger.cpp
-)
-
-set(netmine_connector_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/connector)
-set(netmine_connector_SOURCES
-	${netmine_connector_ROOT_DIR}/src/bitcoin_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/command_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/connector_main.cpp
-)
-
-#add_bitcode(shadow-netmine-shared-bitcode ${netmine_shared_SOURCES})
-#set_target_properties(shadow-netmine-shared-bitcode PROPERTIES COMPILE_FLAGS "-std=c++11")
-#add_bitcode(shadow-netmine-connector-bitcode ${netmine_connector_SOURCES})
-#set_target_properties(shadow-netmine-connector-bitcode PROPERTIES COMPILE_FLAGS "-std=c++11")
 
 
 #===================================================================
@@ -320,12 +285,12 @@ ADD_CUSTOM_COMMAND (
    OUTPUT ${PTH_ROOT_DIR}/pth_p.h
    COMMAND ${PTH_ROOT_DIR}/shtool 
    ARGS scpp -o ${PTH_ROOT_DIR}/pth_p.h -t ${PTH_ROOT_DIR}/pth_p.h.in -Dcpp -Cintern -M "==\#==" ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
-   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c
+   DEPENDS ${PTH_ROOT_DIR}/pth_p.h.in ${PTH_SOURCES}
    COMMENT "Generating pth_p.h" VERBATIM
 )
 ADD_CUSTOM_TARGET(generate_pth DEPENDS ${PTH_ROOT_DIR}/pth_p.h)
 #set_property(SOURCE ${PTH_SOURCES} APPEND PROPERTY OBJECT_DEPENDS pth_p.h)
-add_bitcode(shadow-pth-bitcode ${PTH_SOURCES})
+add_bitcode(shadow-pth-bitcode ${PTH_SOURCES} ${PTH_ROOT_DIR}/pthread.c)
 add_dependencies(shadow-pth-bitcode generate_pth)
 
 
@@ -444,3 +409,80 @@ install(TARGETS shadow-preload-bitcoind DESTINATION lib)
 
 add_executable(injector injector/injector-main.c injector/injector.c ${picocoin_SOURCES})
 target_link_libraries(injector ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${GLIB_LIBRARIES} -lm)
+
+
+
+
+#===================================================================
+# littonizer
+#===================================================================
+set(netmine_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine)
+include_directories(${netmine_ROOT_DIR}/shared/includes 
+	${netmine_ROOT_DIR}/connector/includes 
+	${netmine_ROOT_DIR}/logserver/includes
+)
+
+set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
+set(netmine_shared_SOURCES
+	${netmine_shared_ROOT_DIR}/src/network.cpp
+	${netmine_shared_ROOT_DIR}/src/config.cpp
+	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/alloc_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/mmap_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/read_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/write_buffer.cpp
+	${netmine_shared_ROOT_DIR}/src/bitcoin.cpp
+	${netmine_shared_ROOT_DIR}/src/crypto.cpp
+	${netmine_shared_ROOT_DIR}/src/iobuf.cpp
+	${netmine_shared_ROOT_DIR}/src/logger.cpp
+)
+
+set(netmine_connector_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/connector)
+set(netmine_connector_SOURCES
+	${netmine_connector_ROOT_DIR}/src/bitcoin_handler.cpp
+	${netmine_connector_ROOT_DIR}/src/command_handler.cpp
+	${netmine_connector_ROOT_DIR}/src/connector_main.cpp
+)
+
+set(netmine_logserver_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/logserver)
+set(netmine_logserver_SOURCES
+	${netmine_logserver_ROOT_DIR}/src/logserver_main.cpp
+	${netmine_logserver_ROOT_DIR}/src/collector.cpp
+	${netmine_logserver_ROOT_DIR}/src/input_cxn.cpp
+	${netmine_logserver_ROOT_DIR}/src/output_cxn.cpp
+)
+add_cxxflags("-std=c++11")
+
+add_bitcode(shadow-netmine-shared-bitcode ${netmine_shared_SOURCES})
+
+# netmine connector plugin
+add_bitcode(shadow-netmine-connector-bitcode
+    netmine-wrapper/connector-plugin.c
+    ${netmine_connector_SOURCES}
+)
+add_plugin(shadow-plugin-netmine-connector
+    shadow-netmine-connector-bitcode
+    shadow-netmine-shared-bitcode
+    shadow-libev-bitcode
+    shadow-pth-bitcode
+)
+target_link_libraries(shadow-plugin-netmine-connector
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} -lconfig++
+)
+install(TARGETS shadow-plugin-netmine-connector DESTINATION plugins)
+
+# netmine logserver plugin
+add_bitcode(shadow-netmine-logserver-bitcode
+    netmine-wrapper/logserver-plugin.c
+    ${netmine_logserver_SOURCES}
+)
+add_plugin(shadow-plugin-netmine-logserver
+    shadow-netmine-logserver-bitcode
+    shadow-netmine-shared-bitcode
+    shadow-libev-bitcode
+    shadow-pth-bitcode
+)
+target_link_libraries(shadow-plugin-netmine-logserver
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} -lconfig++
+)
+install(TARGETS shadow-plugin-netmine-logserver DESTINATION plugins)
