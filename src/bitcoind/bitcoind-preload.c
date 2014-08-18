@@ -29,6 +29,8 @@
 
 #define SHADOW_TIMER_OFFSET 1404101800
 
+G_LOCK_DEFINE_STATIC(shadowtorpreloadGlobalLock);
+
 //#define BITCOIND_LIB_PREFIX "intercept_"
 
 typedef int (*close_fp)(int);
@@ -112,6 +114,7 @@ typedef int (*srandom_r_fp)(unsigned int seed, struct random_data *buf);
 
 /* crypto family */
 typedef void* (*CRYPTO_get_locking_callback_fp)();
+typedef void (*CRYPTO_set_locking_callback_fp)(void (*)(int mode, int n, const char *file, int line));
 typedef void* (*CRYPTO_get_id_callback_fp)();
 typedef int (*SSL_library_init_fp)();
 typedef void (*RAND_seed_fp)(const void *buf, int num);
@@ -259,7 +262,7 @@ typedef int (*pthread_mutex_trylock_fp)(pthread_mutex_t*);
 typedef int (*pthread_mutex_unlock_fp)(pthread_mutex_t*);
 
 typedef int (*CLogPrintStr_fp)(const char*);
-typedef int (*crypto_global_init_fp)(int, const char*, const char*);
+typedef int (*crypto_global_init_fp)(void);
 typedef int (*crypto_global_cleanup_fp)(void);
 
 /* the key used to store each threads version of their searched function library.
@@ -320,6 +323,8 @@ struct _PthTable {
 	__FUNC_TABLE_ENTRY(pth_sendto);
 	__FUNC_TABLE_ENTRY(pth_connect);
 	__FUNC_TABLE_ENTRY(pth_accept);
+
+	epoll_wait_fp swapPlugin_epoll_wait;
 };
 
 typedef struct _FunctionTable FunctionTable;
@@ -450,6 +455,7 @@ struct _FunctionTable {
 
 	/* crypto family */
 	__FUNC_TABLE_ENTRY(CRYPTO_get_locking_callback);
+	__FUNC_TABLE_ENTRY(CRYPTO_set_locking_callback);
 	__FUNC_TABLE_ENTRY(CRYPTO_get_id_callback);
 	__FUNC_TABLE_ENTRY(SSL_library_init);
 	__FUNC_TABLE_ENTRY(RAND_seed);
@@ -657,7 +663,8 @@ int __cxa_atexit(void (*f)(void*), void * arg, void * dso_handle) {
 	_FTABLE_GUARD(int, __cxa_atexit, f, arg, dso_handle);
 	ExecutionContext e = worker->activeContext;
 	worker->activeContext = EXECTX_PTH;
-	int rc = worker->ftable.bitcoindplugin_cxa_atexit(f, arg, dso_handle);
+	//int rc = worker->ftable.bitcoindplugin_cxa_atexit(f, arg, dso_handle);
+	int rc = 0;
 	worker->activeContext = e;
 	return rc;
 }
@@ -789,12 +796,19 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	if (g_str_has_suffix(module_name, "bitcoind.so")) {
 		_PTH_WORKERS(bitcoind);
 		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+
+		/* Crypto global */
+		g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
+		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
+
 	} else if (g_str_has_suffix(module_name, "injector.so")) {
 		_PTH_WORKERS(injector);
 	} else if (g_str_has_suffix(module_name, "connector.so")) {
 		_PTH_WORKERS(netmine_connector);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_connector_pthtable.swapPlugin_epoll_wait));
 	} else if (g_str_has_suffix(module_name, "logserver.so")) {
 		_PTH_WORKERS(netmine_logserver);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_logserver_pthtable.swapPlugin_epoll_wait));
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
@@ -807,10 +821,6 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	SETSYM_OR_FAIL(worker->ftable.nanosleep, "nanosleep");
 	SETSYM_OR_FAIL(worker->ftable.sleep, "sleep");
 	SETSYM_OR_FAIL(worker->ftable.write, "write");
-
-	/* Crypto global */
-	//_WORKER_SET(crypto_global_init);
-	//_WORKER_SET(crypto_global_cleanup);
 
 	/* file specific */
 	_WORKER_SET(fileno);
@@ -906,6 +916,7 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 
 	/* crypto family */
 	_WORKER_SET(CRYPTO_get_locking_callback);
+	_WORKER_SET(CRYPTO_set_locking_callback);
 	_WORKER_SET(CRYPTO_get_id_callback);
 	_WORKER_SET(SSL_library_init);
 	_WORKER_SET(RAND_seed);
@@ -956,6 +967,13 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_shadowtorpreload_cryptoSetup(nLocks);
 	unsigned char a;
 	worker->ftable.RAND_bytes(&a, 1);
+
+	
+	G_LOCK(shadowtorpreloadGlobalLock);
+	worker->activeContext = EXECTX_PLUGIN;	
+	plugin_preload_init_cpp(); // this is a hack to get std::locale initialized
+	worker->activeContext = EXECTX_NONE;
+	G_UNLOCK(shadowtorpreloadGlobalLock);
 }
 
 void bitcoindpreload_setPluginContext(PluginName plg) {
@@ -1099,7 +1117,21 @@ int epoll_create1(int flags) _SHADOW_GUARD(int, epoll_create1, flags);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) 
 	_SHADOW_GUARD(int, epoll_ctl, epfd, op, fd, event)
 int epoll_wait(int epfd, struct epoll_event *events,
-	       int maxevents, int timeout) _SHADOW_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
+	       int maxevents, int timeout) {
+	_FTABLE_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
+	assert(worker->activeContext == EXECTX_PLUGIN);
+	if ((worker->activePlugin == PLUGIN_NETMINE_LOGSERVER || 
+	     worker->activePlugin == PLUGIN_NETMINE_CONNECTOR) && timeout > 0) {
+		// Swap in to the plugin
+		int rc = _get_active_pthtable(worker)->swapPlugin_epoll_wait(epfd, events, maxevents, timeout);
+		return rc;
+	} else {
+		worker->activeContext = EXECTX_PTH;
+		int rc = worker->ftable.epoll_wait(epfd, events, maxevents, timeout);
+		worker->activeContext = EXECTX_PLUGIN;
+		return rc;
+	}
+}
 int epoll_pwait(int epfd, struct epoll_event *events,
 		int maxevents, int timeout, const sigset_t *ss) 
 	_SHADOW_GUARD(int, epoll_pwait, epfd, events, maxevents, timeout, ss);
@@ -1877,15 +1909,21 @@ BitcoindPreloadWorker *_preload_getworker() {
 }
 
 
-int crypto_global_init(int useAccel, const char *accelName, const char *accelDir) {
-	G_LOCK(shadowtorpreloadGlobalLock);
+int crypto_global_init(void) {
+	BitcoindPreloadWorker *worker = _preload_getworker();
+	assert(worker);
+	ExecutionContext e = worker->activeContext;
+	worker->activeContext = EXECTX_SHADOW;
 
+
+	G_LOCK(shadowtorpreloadGlobalLock);
 	gint result = 0;
 	if(++shadowtorpreloadGlobalState.nTorCryptoNodes == 1) {
-		result = _preload_getworker()->ftable.crypto_global_init(useAccel, accelName, accelDir);
+		result = _preload_getworker()->ftable.crypto_global_init();
 	}
-
 	G_UNLOCK(shadowtorpreloadGlobalLock);
+
+	worker->activeContext = e;
 	return result;
 }
 int crypto_global_cleanup(void) {
@@ -1933,6 +1971,14 @@ static void _shadowtorpreload_cryptoLockingFunc(int mode, int n, const char *fil
 void (*CRYPTO_get_locking_callback(void))(int mode,int type,const char *file,
 					  int line) {
 	return _shadowtorpreload_cryptoLockingFunc;
+}
+
+void CRYPTO_set_locking_callback(void (*locking_function)(int mode,
+							  int n, const char *file, int line))
+{
+	BitcoindPreloadWorker* worker = pluginWorkerKey;        
+	assert(worker);
+	worker->ftable.CRYPTO_set_locking_callback(_shadowtorpreload_cryptoLockingFunc);
 }
 
 static void _shadowtorpreload_cryptoSetup(int numLocks) {
@@ -1995,6 +2041,10 @@ int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseud
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
 const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_method);
+
+int OPENSSL_add_all_algorithms_noconf() {
+  return 0;
+}
 
 /* Inception! g_private_get is special because it's called by shadow before deciding
    whether to look up symbols again from the beginning. */

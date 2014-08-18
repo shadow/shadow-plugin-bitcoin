@@ -9,6 +9,19 @@ int LogPrintStr(const std::string &str) {
   return CLogPrintStr(str.c_str());
 }
 
+extern "C"
+void plugin_preload_init_cpp() {
+  // Trigger global static initialization of the locale system
+  std::locale::locale();
+}
+
+namespace std  _GLIBCXX_VISIBILITY(default){
+  _GLIBCXX_BEGIN_NAMESPACE_VERSION
+  void locale::_S_initialize() {
+    assert(0);
+  }
+}
+
 /*
 namespace preload {
   extern pthread_key_t &_boosthack_current_thread_tls_key();

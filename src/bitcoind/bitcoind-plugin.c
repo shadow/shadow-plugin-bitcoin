@@ -43,6 +43,7 @@ struct exit_node { void (*f)(void*); void *arg; void *dso_handle; };
 int bitcoindplugin_cxa_atexit(void (*f)(void*), void *arg, void *dso_handle) {
 	//assert(!arg);
 	//assert(!dso_handle);
+        return 0;
 	struct exit_node *node = malloc(sizeof(struct exit_node));
 	node->f = f;
 	node->arg = arg;
@@ -165,6 +166,8 @@ static void bitcoindplugin_ready() {
 struct args_t {int argc; char **argv; ShadowLogFunc slogf;};
 
 void *_bitcoind_new(struct args_t *args) {
+	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
+	_plugin_ctors();
 	assert(args);
 	int argc = args->argc;
 	char **argv = args->argv;
@@ -188,19 +191,21 @@ static void bitcoindplugin_new(int argc, char* argv[]) {
 	bitcoindpreload_setPthContext();
 	pth_init();
 
-	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
-	_plugin_ctors();
+	char **argv_ = malloc(argc * sizeof(char*));
+	int i;
+	for (i = 0; i < argc; i++) {
+	  argv_[i] = malloc(strlen(argv[i])+1);
+	  strcpy(argv_[i], argv[i]);
+	}
 
-	bitcoindpreload_setPthContext();
-	//helloNodeInstance = hello_new(argc, argv, shadowlib.log);
-	struct args_t args = {argc, argv, shadowlib.log};
+	struct args_t args = {argc, argv_, shadowlib.log};
 	pth_t t = pth_spawn(PTH_ATTR_DEFAULT, (void *(*)(void*))&_bitcoind_new, &args);
-	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);
 
 	// Jog the threads once
-	bitcoindplugin_ready();
 
 	bitcoindpreload_setShadowContext();
+	//shadowlib.createCallback((ShadowPluginCallbackFunc) bitcoindplugin_ready, NULL, 1);
+	bitcoindplugin_ready();
 }
 
 /* plug-in initialization. this only happens once per plug-in,
