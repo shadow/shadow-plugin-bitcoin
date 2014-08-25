@@ -80,6 +80,10 @@ typedef int (*shutdown_fp)(int, int);
 typedef int (*pipe_fp)(int [2]);
 typedef int (*pipe2_fp)(int [2], int);
 typedef int (*eventfd_fp)(unsigned int, int);
+typedef int (*timerfd_create_fp)(int clockid, int flags);
+typedef int (*timerfd_settime_fp)(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *curr_value);
+typedef int (*timer_create_fp)(clockid_t clockid, struct sigevent *sevp, timer_t *timerid);
+
 //typedef size_t (*read_fp)(int, void*, int);
 //typedef size_t (*write_fp)(int, const void*, int);
 //typedef int (*close_fp)(int);
@@ -366,6 +370,9 @@ struct _FunctionTable {
 	__FUNC_TABLE_ENTRY(pipe);
 	__FUNC_TABLE_ENTRY(pipe2);
 	__FUNC_TABLE_ENTRY(eventfd);
+	__FUNC_TABLE_ENTRY(timerfd_create);
+	__FUNC_TABLE_ENTRY(timerfd_settime);
+	__FUNC_TABLE_ENTRY(timer_create);
 	__FUNC_TABLE_ENTRY(readv);
 	__FUNC_TABLE_ENTRY(writev);
 	__FUNC_TABLE_ENTRY(pread);
@@ -625,6 +632,7 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 #define _SHADOW_GUARD(rctype, func, ...) {			\
 		_FTABLE_GUARD(rctype, func, __VA_ARGS__);	\
 		worker->activeContext = EXECTX_PTH;		\
+                assert(worker->ftable.func);			\
 		rctype rc = worker->ftable.func(__VA_ARGS__);	\
 		worker->activeContext = EXECTX_PLUGIN;		\
 		return rc;					\
@@ -854,6 +862,7 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_WORKER_SET(setvbuf);
 	_WORKER_SET(freopen);
 	_WORKER_SET(fdatasync);
+	_WORKER_SET(pread);
 
 
 	/* socket/io family */
@@ -880,6 +889,9 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 	_WORKER_SET(pipe);
 	_WORKER_SET(pipe2);
 	_WORKER_SET(eventfd);
+	_WORKER_SET(timerfd_create);
+	_WORKER_SET(timerfd_settime);
+	_WORKER_SET(timer_create);
 
 	/* time family */
 	_WORKER_SET(gettimeofday);
@@ -1175,7 +1187,7 @@ int shutdown(int fd, int how) _SHADOW_GUARD(int, shutdown, fd, how);
 //int close(int fd) { assert(0); }
 ssize_t readv(int fd, const struct iovec *iov, int iovcnt) { assert(0); }
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt) { assert(0); }
-ssize_t pread(int fd, void *buf, size_t nbytes, off_t offset) { assert(0); }
+ssize_t pread(int fd, void *buf, size_t nbytes, off_t offset) _SHADOW_GUARD(ssize_t, pread, fd, buf, nbytes, offset);
 ssize_t pwrite(int fd, const void *buf, size_t nbytes, off_t offset) { assert(0); }
 
 int fcntl(int fd, int cmd, ...) {
@@ -1239,10 +1251,9 @@ int ioctl(int fd, unsigned long int request, ...) {
 int pipe2(int pipefds[2], int flags) _SHADOW_GUARD(int, pipe2, pipefds, flags);
 int pipe(int pipefds[2]) _SHADOW_GUARD(int, pipe, pipefds);
 int eventfd(unsigned int initval, int flags) _SHADOW_GUARD(int, eventfd, initval, flags);
-int timerfd_create(int clockid, int flags) { assert(0); }
-int timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *curr_value) { assert(0); }
-int timerfd_gettime(int fd, struct itimerspec *curr_value) { assert(0); }
-int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid) { assert(0); }
+int timerfd_create(int clockid, int flags) _SHADOW_GUARD(int, timerfd_create, clockid, flags);
+int timerfd_settime(int fd, int flags, const struct itimerspec *new_value, struct itimerspec *curr_value) _SHADOW_GUARD(int, timerfd_settime, fd, flags, new_value, curr_value);
+int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid) _SHADOW_GUARD(int, timer_create, clockid, sevp, timerid);
 
 int select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *timeout) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
@@ -1325,7 +1336,7 @@ int dup3(int oldfd, int newfd, int flags) { assert(0); }
 int fclose(FILE *fp) _SHADOW_GUARD(int, fclose, fp);
 int __fxstat (int ver, int fd, struct stat *buf) _SHADOW_GUARD(int, __fxstat, ver, fd, buf);
 int fstatfs (int fd, struct statfs *buf) _SHADOW_GUARD(int, fstatfs, fd, buf);
-off_t lseek(int fd, off_t offset, int whence) { assert(0); }
+off_t lseek(int fd, off_t offset, int whence) _SHADOW_GUARD(off_t, lseek, fd, offset, whence);
 int flock(int fd, int operation) { assert(0); }
 int posix_fallocate(int fd, off_t offset, off_t len) _SHADOW_GUARD(int, posix_fallocate, fd, offset, len);
 int ftruncate(int fd, off_t length) _SHADOW_GUARD(int, ftruncate, fd, length);
@@ -2025,8 +2036,20 @@ static void _shadowtorpreload_cryptoTeardown() {
 
 /* SSL */
 int SSL_library_init() {
+	static int ssl_init = 0;
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	assert(worker);
+	assert(worker->activeContext == EXECTX_PLUGIN);
+	worker->activeContext = EXECTX_SHADOW;
+	G_LOCK(shadowtorpreloadGlobalLock);
+	if (!ssl_init) {
+		ssl_init = worker->ftable.SSL_library_init();
+	}
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+	worker->activeContext = EXECTX_PLUGIN;
+	return ssl_init;
+	
 	//_SHADOW_GUARD(int, SSL_library_init);
-        return 0;
 }
 void SSL_load_error_strings() {
 	// FIXME
@@ -2040,6 +2063,39 @@ int RAND_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_bytes, buf, 
 int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseudo_bytes, buf, num);
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
+//int SSLv23_method(void) { return 0; }
+typedef struct SSL_METHOD;
+typedef SSL_CTX *(*SSL_CTX_new_fp)(const struct SSL_METHOD *method);
+SSL_CTX *SSL_CTX_new(const struct SSL_METHOD *method) {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	assert(worker);
+	assert(worker->activeContext == EXECTX_PLUGIN);
+	worker->activeContext = EXECTX_SHADOW;
+	G_LOCK(shadowtorpreloadGlobalLock);
+	SSL_CTX *rc = NULL;
+	if (!rc) {
+		SSL_CTX_new_fp real = dlsym(RTLD_NEXT, "SSL_CTX_new");
+		assert(real);
+		rc = real(method);
+	}
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+	worker->activeContext = EXECTX_PLUGIN;
+	return rc;
+}
+typedef long (*SSL_ctrl_fp)(SSL *s, int cmd, long larg, char *parg );
+long SSL_ctrl(SSL *s, int cmd, long larg, char *parg ) {
+	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
+	assert(worker);
+	assert(worker->activeContext == EXECTX_PLUGIN);
+	worker->activeContext = EXECTX_SHADOW;
+	G_LOCK(shadowtorpreloadGlobalLock);
+	SSL_ctrl_fp real = dlsym(RTLD_NEXT, "SSL_ctrl");
+	assert(real);
+	long rc = real(s, cmd, larg, parg);
+	G_UNLOCK(shadowtorpreloadGlobalLock);
+	worker->activeContext = EXECTX_PLUGIN;
+	return rc;
+}
 const void *RAND_get_rand_method() _SHADOW_GUARD(const void*, RAND_get_rand_method);
 
 int OPENSSL_add_all_algorithms_noconf() {
