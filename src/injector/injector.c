@@ -34,11 +34,17 @@ static ShadowLogFunc slogf;
 
 #include <signal.h>
 
-int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {       
-	slogf = slogf_;
-	assert(argc == 2);
-
-	char *serverHostName = argv[1];
+int send_getinfo(const char *serverHostName) {
+	static const char getinfo_string[] = "POST / HTTP/1.1"
+	  "User-Agent: bitcoin-json-rpc/v0.9.99.0-bdc7f1a-beta"
+	  "Host: 127.0.0.1"
+	  "Content-Type: application/json"
+	  "Content-Length: 40"
+	  "Connection: close"
+	  "Accept: application/json"
+	  "Authorization: Basic Yml0Y29pbnJwYzo0SjdZVUtnUkhkOGhVV3AxNGUyMzNwd21rUHRiblEyY1VTNFBNeGl5MUo2eg=="
+	  ""
+	  "{\"method\":\"getinfo\",\"params\":[],\"id\":1}";
 
 	/* get the address of the server */
 	struct addrinfo* serverInfo;
@@ -66,7 +72,7 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 	memset(&serverAddress, 0, sizeof(serverAddress));
 	serverAddress.sin_family = AF_INET;
 	serverAddress.sin_addr.s_addr = serverIP;
-	serverAddress.sin_port = htons(8333);
+	serverAddress.sin_port = htons(8332);
 
 	/* connect to server. since we are non-blocking, we expect this to return EINPROGRESS */
 	res = connect(sd,(struct sockaddr *)  &serverAddress, sizeof(serverAddress));
@@ -77,6 +83,59 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		return -1;
 	}
 
+	int rc = send(sd, getinfo_string, sizeof(getinfo_string), 0);
+	assert(rc == sizeof(getinfo_string));
+	return 0;
+}
+
+int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {       
+	slogf = slogf_;
+	assert(argc >= 2);
+
+	char *serverHostName = argv[1];
+
+	//send_getinfo(serverHostName);
+	//return 0;
+
+	/* get the address of the server */
+	struct addrinfo* serverInfo;
+	int res = getaddrinfo(serverHostName, NULL, NULL, &serverInfo);
+	if(res == -1) {
+		slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
+				"unable to start client: error in getaddrinfo");
+		return -1;
+	}
+
+	in_addr_t serverIP = ((struct sockaddr_in*)(serverInfo->ai_addr))->sin_addr.s_addr;
+	freeaddrinfo(serverInfo);
+
+
+	/* create the client socket and get a socket descriptor */
+	int sd = socket(AF_INET, SOCK_STREAM, 0);
+	if(sd == -1) {
+		slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
+				"unable to start client: error in socket");
+		return -1;
+	}
+
+	//int buffersize = 1000*1*1000;  // default size
+	//setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (char *) &buffersize, sizeof(buffersize));
+
+	/* our client socket address information for connecting to the server */
+	struct sockaddr_in serverAddress;
+	memset(&serverAddress, 0, sizeof(serverAddress));
+	serverAddress.sin_family = AF_INET;
+	serverAddress.sin_addr.s_addr = serverIP;
+	serverAddress.sin_port = htons(8333);
+
+	/* connect to server. since we are non-blocking, we expect this to return EINPROGRESS */
+	res = connect(sd,(struct sockaddr *)  &serverAddress, sizeof(serverAddress));
+
+	if (res == -1 && errno != EINPROGRESS) {
+		slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
+				"unable to start client: error in connect");
+		return -1;
+	}
 
 	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
 	      "sending begin");
@@ -103,23 +162,55 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		int rc = send(sd, msg->str, msg->len, 0);
 		assert(rc == msg->len);
 	}
+	{
+		struct msg_ping mv;
+		msg_ping_init(&mv);
+		bitcoindpreload_setShadowContext();
+		GString *rs = ser_msg_version(&mv);
+		GString *msg = message_str(chain_metadata[CHAIN_BITCOIN].netmagic, "ping", rs->str, rs->len);
+		bitcoindpreload_setPluginContext(PLUGIN_INJECTOR);
+		int rc = send(sd, msg->str, msg->len, 0);
+		assert(rc == msg->len);
+	}
 	sleep(2);
+	if (argc > 2) {
+		const char *delay = argv[2];
+		int d=100;
+		//sscanf(delay, "%d", &d);
+		slogf(SHADOW_LOG_LEVEL_CRITICAL,__FUNCTION__,
+		      "delaying for %s, %d seconds", argv[2], d);
+		sleep(d);
+	}
 	{
 		// Read the payload file and send it
 		const char *payload_path = "/home/amiller/experiment1_payload.dat";
+		if (argc > 2) payload_path = "/home/amiller/experiment1_payload_5meg_even.dat";
 		FILE *f = fopen(payload_path, "rb");
 		assert(f);
-		const int BUF = 50000;
+		const int BUF = 200000;
 		static char buf[BUF];
 		int rc;
+		int total_sent = 0;
 		while (rc = fread(buf, 1, BUF, f)) {
 			printf("Sending payload: %d bytes\n", rc);
+			char *ptr = buf;
 			while (rc) {
-				int sent = send(sd, buf, rc, 0);
+				int sent = send(sd, ptr, rc, 0);
+				if (sent == -1) {
+					if (errno == EAGAIN) {
+						usleep(5*1000);
+						continue;
+					} else {
+						printf("Send failed: %d (%s)\n", errno, strerror(errno));
+						exit(1);
+					}
+				}
 				rc -= sent;
+				ptr += sent;
 				printf("Sent %d bytes, %d remaining\n", sent, rc);
+				total_sent += sent;
 			}
-			usleep(15*1000);
+			usleep(10*1000);
 		}
 		printf("Sending done\n");
 	}
@@ -127,8 +218,9 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 
 	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
 	      "sending done");
-
-	sleep(10);
+	
+	while (1)
+		sleep(10);
 	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
 	      "sleep done");
 
