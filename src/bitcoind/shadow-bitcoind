@@ -23,6 +23,8 @@ def main():
     ap.add_argument('-o', '--output-dir', action="store", type=str, dest="output", help="PATH to directory from which to run Shadow", metavar='PATH', default=DEFAULTOUTPUT)
     ap.add_argument('-c', '--compress', action="store", dest="compress", help="use N xz threads to compress the logfile inline", metavar="N", default=0)
     ap.add_argument('-r', '--reset', action="store", dest="reset", type=int, help="reset data directory and exit", default=0)
+    ap.add_argument('-T', '--template', action="store", dest="template", type=str, help="template directory to copy", default=None)
+
     ap.add_argument('-y', '--assume-yes', action="store_true", dest="clear", help="don't ask before resetting data directory", default=False)
     ap.add_argument('-t', '--tee', action="store_true", dest="tee", help="print log file to console", default=False)
     
@@ -46,7 +48,7 @@ def main():
         
     # reset the data directory
     if args.reset:
-        reset(args.output, args.reset)
+        reset(args.output, args.reset, args.template)
         log("Data directory reset in output path")
     
     #if args.reset: return 0
@@ -118,16 +120,20 @@ def query_yes_no(question, default="yes"):
         elif choice in valid: return valid[choice]
         else: sys.stderr.write("Please respond with 'yes' or 'no' (or 'y' or 'n').\n")
 
-def reset(output, count):
+def reset(output, count, template):
     if os.path.exists(output+"/data"): shutil.rmtree(output+"/data")
     os.mkdir(output+"/data")
     os.symlink(output+"/initdata/pristine", output+"/data/pristine")
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin1", symlinks=True)
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin2", symlinks=True)
+    print 'template', template
     for i in range(1,count+1):
         print >> sys.stderr, "copying " + output+"/data/.bitcoin%d" % i
-        #shutil.copytree(output+"/initdata/dotbitcoin_template_300k", output+"/data/.bitcoin%d" % i, symlinks=True)
-        shutil.copytree(output+"/initdata/dotbitcoin_template_330k", output+"/data/.bitcoin%d" % i, symlinks=True)
+        if template is not None:
+            shutil.copytree(template, output+"/data/.bitcoin%d" % i, symlinks=True)
+        else:
+            os.mkdir(output+"/data/.bitcoin%d" % i)
+        #shutil.copytree(output+"/initdata/dotbitcoin_template_330k", output+"/data/.bitcoin%d" % i, symlinks=True)
         #shutil.copy(output+"/snapshot.dat", output+"/data/.bitcoin1/snapshot.dat")
 
 def log(msg):
