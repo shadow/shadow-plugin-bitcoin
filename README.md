@@ -113,26 +113,60 @@ mkdir shadow-plugin-bitcoin; cd shadow-plugin-bitcoin
 CC=`which clang` CXX=`which clang++` cmake ../..
 make -jN
 make install
+cd ..
 ```
 
 Replace `N` with the number of cores you want to use for a parallel build.
 
-## Preparing blockchain datasets
-
-It's useful to launch experiments with Bitcoin nodes that have already processed the blockchain up to some point in history. To conserve memory, we can have multiple nodes share a single copy of most of the blockchain database files. The script `tools/make_symlinks.sh` is provided to build a dotbitcoin\_template directory that contains symlinks to an underlying dotbitcoin\_backing directory.
-
 ## Running an experiment
-Example:
-```
-../src/bitcoind/shadow-bitcoind -y -i ../resource/shadow.config.xml -t
-```
+
+The script that drives the experiment is at src/bitcoind/shadow-bitcoind.
 
 Command line options:
 + `-t` prints the output to stdout as well as to data/shadow.log
 + `-r $N` initializes $N data directories, named .bitcoin1, .bitcoin2, ..., .bitcoin$N
 + `-T $template` if option `-r $N` is provided, this specifies the template directory that is copied over. If `-T` is not provided, then the initialized directories will be empty
 
-List of provided examples:
+### basic example
+
+To run the most basic experiment, first generate the bitcoind data directories, then run the example:
+
+```bash
+mkdir run
+cd run
+../src/bitcoind/shadow-bitcoind -y -i ../resource/shadow.config.xml -r 2 -t | grep -e "received: getaddr" -e "received: verack"
+```
+
+### more realistic examples
+
+In order to run a more realistic large scale example, we need to prepare some initialization blockchain datasets. It's useful to launch these experiments with Bitcoin nodes that have already processed the blockchain up to some point in history. To conserve memory, we can have multiple nodes share a single copy of most of the blockchain database files.
+
+First create the dir structure:
+
+```bash
+mkdir initdata
+cd initdata
+mkdir pristine # will hold the single copy of the blockchain datasets
+cp -R /storage/dotbitcoin_backing_120k pristine/.
+mkdir dotbitcoin_template_120k
+cd dotbitcoin_template_120k
+```
+
+The script `tools/make_symlinks.sh` is provided to build a dotbitcoin\_template directory that contains symlinks to an underlying dotbitcoin\_backing directory.
+
+```
+../../../tools/make_symlinks.sh ../pristine/dotbitcoin_backing_120k
+cd ../..
+```
+
+Now we can run an experiment using the template we just created, where all nodes will share the backing datasets.
+
+```bash
+../src/bitcoind/shadow-bitcoind -y -i ../resource/shadow.config.xml -r 2 -t -T initdata/dotbitcoin_template_120k
+```
+
+### list of other provided examples
+
 + `resources/shadow.config-orphandos.xml` a cpu/memory exhaustion attack
 + `resources/shadow.config-6k.xml` a nearly-full-size experiment
 
