@@ -1,6 +1,3 @@
-# Notes for "with-pth" development branch:
-- use this version of shadow: https://github.com/amiller/shadow/next
-
 # shadow-plugin-bitcoin
 
 Shadow plugin for bitcoind (the Satoshi reference client)
@@ -99,6 +96,21 @@ make install
 ```
 
 Replace `N` with the number of cores you want to use for a parallel build.
+
+## Preparing blockchain datasets
+
+It's useful to launch experiments with Bitcoin nodes that have already processed the blockchain up to some point in history. To conserve memory, we can have multiple nodes share a single copy of most of the blockchain database files. The script `tools/make_symlinks.sh` is provided to build a dotbitcoin\_template directory that contains symlinks to an underlying dotbitcoin\_backing directory.
+
+## Running an experiment
+Example:
+```
+../src/bitcoind/shadow-bitcoind -y -i ../resource/shadow.config.xml -t
+```
+
+Command line options:
++ `-t` prints the output to stdout as well as to data/shadow.log
++ `-r $N` initializes $N data directories, named .bitcoin1, .bitcoin2, ..., .bitcoin$N
++ `-T $template` if option `-r $N` is provided, this specifies the template directory that is copied over. If `-T` is not provided, then the initialized directories will be empty
 
 ## other potentially useful information
 
