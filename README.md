@@ -9,13 +9,13 @@ This repository holds a Shadow plug-in that runs bitcoind. It can be used to run
 Fedora:
 
 ```bash
-sudo yum install libstdc++ libstdc++-devel clang clang-devel llvm llvm-devel glib2 glib2-devel
+sudo yum install libstdc++ libstdc++-devel clang clang-devel llvm llvm-devel glib2 glib2-devel jansson jansson-devel
 ```
 
 Ubuntu:
 
 ```bash
-sudo apt-get install libstdc++ libstdc++-dev clang llvm llvm-dev
+sudo apt-get install libstdc++ libstdc++-dev clang llvm llvm-dev libjansson libjansson-dev
 ```
 
 ## setup plug-in and custom build requirements
@@ -25,7 +25,6 @@ There are several custom build requirements which we will build from the `build`
 ```bash
 git clone git@github.com:amiller/shadow-plugin-bitcoin.git
 cd shadow-plugin-bitcoin
-git checkout with-pth
 mkdir build; cd build
 ```
 
@@ -58,16 +57,18 @@ cd ..
 We need to get the bitcoin source so we can compile it into our Shadow plug-in, and then configure it to obtain a proper `bitcoin-config.h` file.
 
 ```bash
-git clone https://github.com/amiller/bitcoin.git 0.9.2-netmine
+git clone https://github.com/amiller/bitcoin.git -b 0.9.2-netmine
 cd bitcoin
 ./autogen.sh
-PKG_CONFIG_PATH=/home/${USER}/.shadow/lib/pkgconfig LDFLAGS=-L/home/${USER}/.shadow/lib CFLAGS=-I/home/${USER}/.shadow/include CXXFLAGS=-I`pwd`/../boost_1_50_0 ./configure --prefix=/home/${USER}/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests --with-boost-libdir=`pwd`/../boost_1_50_0/stage/lib
+LD_LIBRARY_PATH=`pwd`/../boost_1_50_0/stage/lib PKG_CONFIG_PATH=/home/${USER}/.shadow/lib/pkgconfig LDFLAGS=-L/home/${USER}/.shadow/lib CFLAGS=-I/home/${USER}/.shadow/include CXXFLAGS=-I`pwd`/../boost_1_50_0 ./configure --prefix=/home/${USER}/.shadow --without-miniupnpc --without-gui --disable-wallet --disable-tests --with-boost-libdir=`pwd`/../boost_1_50_0/stage/lib
 cd ..
 ```
 
 Note that `PKG_CONFIG_PATH`, `LDFLAGS`, and `CFLAGS` need to be set to specify the install path of our custom-built OpenSSL.
 
-The `0.9.2-netmine` branch contains a small number of changes to the Bitcoin 0.9.2 release that facilitate experiments. + The leveldb is modified not to use mmap, which reduces memory consumption
+The `0.9.2-netmine` branch contains a small number of changes to the Bitcoin 0.9.2 release that facilitate experiments.
+
++ The leveldb is modified not to use mmap, which reduces memory consumption
 + Command line parameters `-umd_createindexsnapshot` and `-umd_loadindexsnapshot` can be used to skip some expensive startup processing
 + Proof-of-work checking is disabled, to facilitate creating fake blocks
 + The ECDSA signature check routine is to hacked to accept fake signatures from a particular pubkey (the pubkey that received the second ever block reward).
@@ -76,17 +77,31 @@ The `0.9.2-netmine` branch contains a small number of changes to the Bitcoin 0.9
 
 ```bash
 git clone git@github.com:amiller/gnu-pth.git -b shadow
+cd gnu-pth
+./configure --enable-epoll
+cd ..
 ```
 
 ### picocoin
 
-FIXME: Might require jannson too
+(Requires jannson as listed in the dependencies section above.)
 
 ```bash
-git clone git@github.com:jgarzik/picocoin.git
+git clone git@github.com:amiller/picocoin.git
 cd picocoin
 ./autogen.sh
+LDFLAGS=-L/home/${USER}/.shadow/lib ./configure
+cd ..
+```
+
+### libev
+
+```bash
+wget http://pkgs.fedoraproject.org/lookaside/pkgs/libev/libev-4.15.tar.gz/3a73f247e790e2590c01f3492136ed31/libev-4.15.tar.gz
+tar -zxf libev-4.15.tar.gz
+cd libev-4.15
 ./configure
+cd ..
 ```
 
 ### shadow-plugin-bitcoin
