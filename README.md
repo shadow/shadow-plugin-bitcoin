@@ -43,6 +43,8 @@ cd ..
 
 ### boost
 
+Note - if using boost 1_50_0, you need to manually patch boost as shown in [this issue](https://github.com/amiller/shadow-plugin-bitcoin/issues/1) before building
+
 ```bash
 wget http://downloads.sourceforge.net/project/boost/boost/1.50.0/boost_1_50_0.tar.gz
 tar xaf boost_1_50_0.tar.gz
