@@ -82,27 +82,3 @@ def tx_coinbase(height):
     tx._ctx.vin.append(txin)
     return tx
 
-def txpair_from_pubkey(scriptPubKey=None,nValue=50*1e8):
-    """
-    returns:
-       txout: a txout containing a standard pay-to-pubkey
-       sign:  signs the transaction (using an interposed key)
-    """
-    if scriptPubKey is None:
-        # default scriptPubKey, from coinbase #2
-        scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
-    txout = TxOut(scriptPubKey, nValue)
-    def sign(txfrom, ctx, idx):
-        sighash = SignatureHash(scriptPubKey, ctx, idx, SIGHASH_ALL)
-        sig = k.sign(sighash) + chr(SIGHASH_ALL)
-        assert len(sig) < OP_PUSHDATA1
-        scriptSig = CScript(chr(len(sig)) + sig)
-        # Go ahead and set the scriptSig in the transaction, so we can verify
-        ctx.vin[idx].scriptSig = scriptSig
-        try: 
-            VerifySignature(txfrom, ctx, idx)
-        except VerifySignatureError as e:
-            print "Warning: signature did not verify"
-        return scriptSig
-    txin = TxIn(txout, sign)
-    return txout, txin

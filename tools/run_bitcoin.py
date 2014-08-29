@@ -43,10 +43,12 @@ if __name__ == '__main__':
         #  -connect=localhost:8433
         cmd = './bitcoin/src/bitcoind -checkblocks=1 -checklevel=1 -server=0 -listen -debug -port={port} -datadir={datadir} -umd_loadindexsnapshot=./snapshot_300k.dat -par=1 {conns} -externalip=100.100.100.100'
         cmd = cmd.format(datadir=datadir,port=port,ip=i,conns=conns)
+        print cmd
         ps.append(subprocess.Popen(cmd, shell=True, close_fds=True))
 
     for i,j in sorted(edges):
-        print i, '<->', j
+        if i < 80 and j < 80:
+            print i, '<->', j
 
     import signal
     def kill_child():
