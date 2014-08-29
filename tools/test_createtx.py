@@ -169,21 +169,39 @@ def spend_p2sh():
 
     return tx1,tx2
 
-def block_and_p2sh():
-    tx1, tx2 = spend_p2sh()
-    prevhash = "00000000000000005bb3427edaf9b435967c90a490f2b32cfa51f7c32db2397f" # Block 303334 on main chain
-    nBits = 409544770
-    height = 303335
-    nTime = 1401458326
-    ver = 2
+def make_block():
     block = CBlock()
+    if 0: # Builds on block 120594 on main chain
+        prevhash = "0000000000004ba33ad245380d09ed2cf728753421550c23837ac3007ec4c25a"
+        nBits = 453031340
+        height = 120495
+        nTime = 1303963120
+        ver = 1
+    if 0: # Builds on block 303333 on main chain
+        prevhash = "00000000000000005bb3427edaf9b435967c90a490f2b32cfa51f7c32db2397f" # Block 303334 on main chain
+        nBits = 409544770
+        height = 303335
+        nTime = 1401458326
+        ver = 2
+    if 1:
+        prevhash = "00000000000000005bac7c3c745d926451483e7a15ce7a76627861f19f756d22" # Block 302980 on main chain
+        nBits = 409544770
+        height = 302981
+        nTime = 1401257762
+        ver = 2
     block.hashPrevBlock = unhexlify(prevhash)[::-1]
     block.vtx.append(void_coinbase(height=height))
-    block.vtx.append(tx1._ctx)
     block.nBits = nBits
     block.nNonce = 9999999 # Not a valid proof of work, but this is ok
     block.nTime = nTime
     block.nVersion = ver;
+    return block
+
+def block_and_p2sh():
+    tx1, tx2 = spend_p2sh()
+
+    block = make_block()
+    block.vtx.append(tx1._ctx)
     block.hashMerkleRoot = block.calc_merkle_root()
     return block, tx2
 
@@ -199,26 +217,8 @@ def block_with_spend():
     tx2.append_txout(txout)
     tx2.finalize()
     
-    if 0: # Builds on block 120594 on main chain
-        prevhash = "0000000000004ba33ad245380d09ed2cf728753421550c23837ac3007ec4c25a"
-        nBits = 453031340
-        height = 120495
-        nTime = 1303963120
-        ver = 1
-    if 1: # Builds on block 303333 on main chain
-        prevhash = "00000000000000005bb3427edaf9b435967c90a490f2b32cfa51f7c32db2397f" # Block 303334 on main chain
-        nBits = 409544770
-        height = 303335
-        nTime = 1401458326
-        ver = 2
-    block = CBlock()
-    block.hashPrevBlock = unhexlify(prevhash)[::-1]
-    block.vtx.append(void_coinbase(height=height))
+    block = make_block()
     block.vtx.append(tx1._ctx)
-    block.nBits = nBits
-    block.nNonce = 9999999 # Not a valid proof of work, but this is ok
-    block.nTime = nTime
-    block.nVersion = ver;
     block.hashMerkleRoot = block.calc_merkle_root()
     return block, tx2
 
@@ -271,19 +271,10 @@ def make_experiment1(path='./experiment1_payload.dat'):
         tx_setup_ins.append(_in)
     tx_setup.finalize()
 
-    # 1a. Add tx_setup to a block
-    print 'Step 1a.'
-    prevhash = "00000000000000005bb3427edaf9b435967c90a490f2b32cfa51f7c32db2397f" # Block 330334 on main chain
-    block = CBlock()
-    block.hashPrevBlock = unhexlify(prevhash)[::-1]
-    block.vtx.append(void_coinbase(height=303335))
+    # # 1a. Add tx_setup to a block
+    block = make_block()
     block.vtx.append(tx_setup._ctx)
-    block.nBits = 409544770
-    block.nNonce = 9999999 # Not a valid proof of work, but this is ok
-    block.nTime = 1401458326
-    block.nVersion = 2
     block.hashMerkleRoot = block.calc_merkle_root()
-
 
     # 2. Create a "parent" transaction with one output
     print 'Step 2.'
@@ -316,6 +307,15 @@ def make_experiment1(path='./experiment1_payload.dat'):
             m = msg_tx()
             m.tx = tx._ctx
             f.write(m.serialize())
+
+def do_send(sock, msg):
+    written = 0
+    while (written < len(msg)):
+        rv = sock.send(msg[written:], 0)
+        if rv > 0:
+            written = written + rv
+        if rv < 0:
+            raise Exception("Error on write (this happens automatically in python?)");
     
 
 if __name__ == '__main__':    
@@ -333,4 +333,22 @@ if __name__ == '__main__':
     print 'blk:', hexlify(blk.serialize())
     print
     print 'tx2:', hexlify(tx2._ctx.serialize())
+
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0)
+    #socket.create_connection
+    sock.connect("/tmp/bitcoin_control")
+
+    m = msg_block()
+    m.block = blk
+    cmsg = bitcoin_msg(m.serialize())
+    #cmsg = bitcoin_msg("asfalskdfja"*100)
+    ser = cmsg.serialize()
+    do_send(sock, ser)
+    rid = sock.recv(4)
+    rid, = unpack('>I', rid)  # message is now saved and can be sent to users with this id
+    print "rid is " + str(rid)
+
+    cmsg = command_msg(commands.COMMAND_SEND_MSG, rid, (targets.BROADCAST,))
+    ser = cmsg.serialize()
+    do_send(sock, ser)
 
