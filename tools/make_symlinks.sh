@@ -8,7 +8,7 @@ fi
 echo "FIXME: assuming there are exactly 144 block files in $1"
 # TODO: find the actual number of block files
 PRISTINE=$1
-LASTBLK=$(echo $(ls -1 $PRISTINE/blocks/ | grep blk | wc -l) 1 - p | dc)
+LASTBLK=$(echo $(ls -1 $PRISTINE/blocks/ | grep blk | wc -l) 1 - p | dc) # WARNING! dc isn't installed by default
 LASTBLKTXT=$(seq -f %05.0f $LASTBLK $LASTBLK) # Pad the last block
 mkdir -p ./blocks
 
@@ -18,7 +18,6 @@ cp $PRISTINE/blocks/blk$LASTBLKTXT.dat $PRISTINE/blocks/rev$LASTBLKTXT.dat ./blo
 cp $PRISTINE/bitcoin.conf ./
 
 # Copy the block index files
-#cp -r $PRISTINE/blocks/index ./blocks
 mkdir -p ./blocks/index
 for x in $(ls -1 $PRISTINE/blocks/index); do
     if [ $(cat $PRISTINE/blocks/index/$x | wc -c) -lt 2100000 ]; then
