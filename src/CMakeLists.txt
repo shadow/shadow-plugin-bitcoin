@@ -465,9 +465,10 @@ add_plugin(shadow-plugin-netmine-connector
     shadow-netmine-shared-bitcode
     shadow-libev-bitcode
     shadow-pth-bitcode
+    shadow-boost-bitcode
 )
 target_link_libraries(shadow-plugin-netmine-connector
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} -lconfig++
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
 )
 install(TARGETS shadow-plugin-netmine-connector DESTINATION plugins)
 
@@ -481,8 +482,9 @@ add_plugin(shadow-plugin-netmine-logserver
     shadow-netmine-shared-bitcode
     shadow-libev-bitcode
     shadow-pth-bitcode
+    shadow-boost-bitcode
 )
 target_link_libraries(shadow-plugin-netmine-logserver
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} -lconfig++
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
 )
 install(TARGETS shadow-plugin-netmine-logserver DESTINATION plugins)
