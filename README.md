@@ -9,13 +9,13 @@ This repository holds a Shadow plug-in that runs bitcoind. It can be used to run
 Fedora:
 
 ```bash
-sudo yum install libstdc++ libstdc++-devel clang clang-devel llvm llvm-devel glib2 glib2-devel jansson jansson-devel
+sudo yum install libstdc++ libstdc++-devel clang clang-devel llvm llvm-devel glib2 glib2-devel
 ```
 
 Ubuntu:
 
 ```bash
-sudo apt-get install libstdc++ libstdc++-dev clang llvm llvm-dev libjansson libjansson-dev
+sudo apt-get install libstdc++ libstdc++-dev clang llvm llvm-dev
 ```
 
 ## setup plug-in and custom build requirements
@@ -84,28 +84,6 @@ cd gnu-pth
 cd ..
 ```
 
-### picocoin
-
-(Requires jannson as listed in the dependencies section above.)
-
-```bash
-git clone git@github.com:amiller/picocoin.git
-cd picocoin
-./autogen.sh
-LDFLAGS=-L/home/${USER}/.shadow/lib ./configure
-cd ..
-```
-
-### libev
-
-```bash
-wget http://pkgs.fedoraproject.org/lookaside/pkgs/libev/libev-4.15.tar.gz/3a73f247e790e2590c01f3492136ed31/libev-4.15.tar.gz
-tar -zxf libev-4.15.tar.gz
-cd libev-4.15
-./configure
-cd ..
-```
-
 ### shadow-plugin-bitcoin
 
 Now we are ready to build the actual Shadow plug-in using cmake.
@@ -166,11 +144,6 @@ Now we can run an experiment using the template we just created, where all nodes
 ```bash
 ../src/bitcoind/shadow-bitcoind -y -i ../resource/shadow.config.xml -r 2 -t -T initdata/dotbitcoin_template_120k
 ```
-
-### list of other provided examples
-
-+ `resources/shadow.config-orphandos.xml` a cpu/memory exhaustion attack
-+ `resources/shadow.config-6k.xml` a nearly-full-size experiment
 
 ## other potentially useful information
 
