@@ -81,57 +81,6 @@ set(boost_sources
     ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
 )
 
-#===================================================================
-# libev
-#===================================================================
-set(libev_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/libev-4.15)
-include_directories(${libev_ROOT_DIR}/)
-set(libev_SOURCES
-	${libev_ROOT_DIR}/ev.c
-	${libev_ROOT_DIR}/event.c
-)
-add_bitcode(shadow-libev-bitcode ${libev_SOURCES})
-
-
-#===================================================================
-# picocoin
-#===================================================================
-set(picocoin_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/picocoin)
-include_directories(${picocoin_ROOT_DIR}/ ${picocoin_ROOT_DIR}/include ${GLIB_INCLUDES})
-set(picocoin_SOURCES
-	${picocoin_ROOT_DIR}/lib/address.c
-	${picocoin_ROOT_DIR}/lib/addr_match.c
-	${picocoin_ROOT_DIR}/lib/base58.c
-	${picocoin_ROOT_DIR}/lib/bignum.c
-	${picocoin_ROOT_DIR}/lib/blkdb.c
-	${picocoin_ROOT_DIR}/lib/block.c
-	${picocoin_ROOT_DIR}/lib/blockfile.c
-	${picocoin_ROOT_DIR}/lib/bloom.c
-	${picocoin_ROOT_DIR}/lib/buffer.c
-	${picocoin_ROOT_DIR}/lib/buint.c
-	${picocoin_ROOT_DIR}/lib/checkpoints.c
-	${picocoin_ROOT_DIR}/lib/core.c
-	${picocoin_ROOT_DIR}/lib/coredefs.c
-	${picocoin_ROOT_DIR}/lib/dns.c
-	${picocoin_ROOT_DIR}/lib/file_seq.c
-	${picocoin_ROOT_DIR}/lib/hexcode.c
-	${picocoin_ROOT_DIR}/lib/key.c
-	${picocoin_ROOT_DIR}/lib/keyset.c
-	${picocoin_ROOT_DIR}/lib/keystore.c
-	${picocoin_ROOT_DIR}/lib/mbr.c
-	${picocoin_ROOT_DIR}/lib/memmem.c
-	${picocoin_ROOT_DIR}/lib/message.c
-	${picocoin_ROOT_DIR}/lib/net.c
-	${picocoin_ROOT_DIR}/lib/script.c
-	${picocoin_ROOT_DIR}/lib/script_eval.c
-	${picocoin_ROOT_DIR}/lib/script_names.c
-	${picocoin_ROOT_DIR}/lib/script_sign.c
-	${picocoin_ROOT_DIR}/lib/serialize.c
-	${picocoin_ROOT_DIR}/lib/util.c
-	${picocoin_ROOT_DIR}/lib/utxo.c
-)
-add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
-
 
 #===================================================================
 # bitcoin
@@ -365,22 +314,6 @@ target_link_libraries(shadow-plugin-bitcoind
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 
-
-# injector plugin
-add_bitcode(shadow-plugin-bitcoin-injector-bitcode
-    injector/injector-plugin.c
-    injector/injector.c
-)
-add_plugin(shadow-plugin-bitcoin-injector
-    shadow-plugin-bitcoin-injector-bitcode
-    shadow-picocoin-bitcode
-    shadow-pth-bitcode
-)
-target_link_libraries(shadow-plugin-bitcoin-injector
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
-)
-install(TARGETS shadow-plugin-bitcoin-injector DESTINATION plugins)
-
 # bitcoincli plugin
 #add_bitcode(shadow-plugin-bitcoincli-bitcode 
 #    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
@@ -405,86 +338,3 @@ target_link_libraries(shadow-preload-bitcoind
     ${GLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)
-
-
-add_executable(injector injector/injector-main.c injector/injector.c ${picocoin_SOURCES})
-target_link_libraries(injector ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${GLIB_LIBRARIES} -lm)
-
-
-
-
-#===================================================================
-# littonizer
-#===================================================================
-set(netmine_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine)
-include_directories(${netmine_ROOT_DIR}/shared/includes 
-	${netmine_ROOT_DIR}/connector/includes 
-	${netmine_ROOT_DIR}/logserver/includes
-)
-
-set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
-set(netmine_shared_SOURCES
-	${netmine_shared_ROOT_DIR}/src/network.cpp
-	${netmine_shared_ROOT_DIR}/src/config.cpp
-	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/alloc_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/mmap_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/read_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/write_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/bitcoin.cpp
-	${netmine_shared_ROOT_DIR}/src/crypto.cpp
-	${netmine_shared_ROOT_DIR}/src/iobuf.cpp
-	${netmine_shared_ROOT_DIR}/src/logger.cpp
-)
-
-set(netmine_connector_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/connector)
-set(netmine_connector_SOURCES
-	${netmine_connector_ROOT_DIR}/src/bitcoin_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/command_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/connector_main.cpp
-)
-
-set(netmine_logserver_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/logserver)
-set(netmine_logserver_SOURCES
-	${netmine_logserver_ROOT_DIR}/src/logserver_main.cpp
-	${netmine_logserver_ROOT_DIR}/src/collector.cpp
-	${netmine_logserver_ROOT_DIR}/src/input_cxn.cpp
-	${netmine_logserver_ROOT_DIR}/src/output_cxn.cpp
-)
-add_cxxflags("-std=c++11")
-
-add_bitcode(shadow-netmine-shared-bitcode ${netmine_shared_SOURCES})
-
-# netmine connector plugin
-add_bitcode(shadow-netmine-connector-bitcode
-    netmine-wrapper/connector-plugin.c
-    ${netmine_connector_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-connector
-    shadow-netmine-connector-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-connector
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-connector DESTINATION plugins)
-
-# netmine logserver plugin
-add_bitcode(shadow-netmine-logserver-bitcode
-    netmine-wrapper/logserver-plugin.c
-    ${netmine_logserver_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-logserver
-    shadow-netmine-logserver-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-logserver
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-logserver DESTINATION plugins)
