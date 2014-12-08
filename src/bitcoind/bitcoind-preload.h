@@ -12,7 +12,7 @@ enum _ExecutionContext {
 
 typedef enum _PluginName PluginName;
 enum _PluginName {
-  PLUGIN_BITCOIND,
+  PLUGIN_BITCOIND, PLUGIN_BITCOIND2
 };
 
 void bitcoindpreload_setPluginContext(PluginName plg);

@@ -507,6 +507,7 @@ struct _BitcoindPreloadWorker {
 	long isPlugin;
 	FunctionTable ftable;
 	PthTable bitcoind_pthtable;
+	PthTable bitcoind2_pthtable;
 	PthTable injector_pthtable;
 	PthTable netmine_connector_pthtable;
 	PthTable netmine_logserver_pthtable;
@@ -518,6 +519,7 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	//assert(worker->activeContext == EXECTX_PLUGIN);
 	switch (worker->activePlugin) {
 	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
+	case PLUGIN_BITCOIND2: return &worker->bitcoind2_pthtable;
 	}
 	assert(0);
 	return 0;
@@ -798,13 +800,23 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 
 	const char *module_name = g_module_name(handle);
 	/* lookup all our required symbols in this worker's module, asserting success */
-	if (g_str_has_suffix(module_name, "bitcoind.so")) {
+	if (g_str_has_suffix(module_name, "bitcoind.so") ||
+	        g_str_has_suffix(module_name, "bitcoind.092.so")) {
 		_PTH_WORKERS(bitcoind);
 		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
 
 		/* Crypto global */
 		g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
 		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
+
+	} else if (g_str_has_suffix(module_name, "bitcoind.093.so")) {
+        _PTH_WORKERS(bitcoind2);
+        g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+
+        /* Crypto global */
+        g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
+        g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
+
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
