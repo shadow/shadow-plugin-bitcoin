@@ -12,7 +12,7 @@ enum _ExecutionContext {
 
 typedef enum _PluginName PluginName;
 enum _PluginName {
-  PLUGIN_BITCOIND, PLUGIN_INJECTOR, PLUGIN_NETMINE_CONNECTOR, PLUGIN_NETMINE_LOGSERVER,
+  PLUGIN_BITCOIND,
 };
 
 void bitcoindpreload_setPluginContext(PluginName plg);

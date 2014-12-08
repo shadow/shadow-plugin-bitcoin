@@ -518,9 +518,6 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	//assert(worker->activeContext == EXECTX_PLUGIN);
 	switch (worker->activePlugin) {
 	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
-	case PLUGIN_INJECTOR: return &worker->injector_pthtable;
-	case PLUGIN_NETMINE_CONNECTOR: return &worker->netmine_connector_pthtable;
-	case PLUGIN_NETMINE_LOGSERVER: return &worker->netmine_logserver_pthtable;
 	}
 	assert(0);
 	return 0;
@@ -808,15 +805,6 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 		/* Crypto global */
 		g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
 		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
-
-	} else if (g_str_has_suffix(module_name, "injector.so")) {
-		_PTH_WORKERS(injector);
-	} else if (g_str_has_suffix(module_name, "connector.so")) {
-		_PTH_WORKERS(netmine_connector);
-		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_connector_pthtable.swapPlugin_epoll_wait));
-	} else if (g_str_has_suffix(module_name, "logserver.so")) {
-		_PTH_WORKERS(netmine_logserver);
-		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_logserver_pthtable.swapPlugin_epoll_wait));
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
