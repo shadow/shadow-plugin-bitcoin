@@ -507,6 +507,7 @@ struct _BitcoindPreloadWorker {
 	long isPlugin;
 	FunctionTable ftable;
 	PthTable bitcoind_pthtable;
+	PthTable bitcoind2_pthtable;
 	PthTable injector_pthtable;
 	PthTable netmine_connector_pthtable;
 	PthTable netmine_logserver_pthtable;
@@ -518,9 +519,7 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	//assert(worker->activeContext == EXECTX_PLUGIN);
 	switch (worker->activePlugin) {
 	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
-	case PLUGIN_INJECTOR: return &worker->injector_pthtable;
-	case PLUGIN_NETMINE_CONNECTOR: return &worker->netmine_connector_pthtable;
-	case PLUGIN_NETMINE_LOGSERVER: return &worker->netmine_logserver_pthtable;
+	case PLUGIN_BITCOIND2: return &worker->bitcoind2_pthtable;
 	}
 	assert(0);
 	return 0;
@@ -773,6 +772,8 @@ static void _shadowtorpreload_cryptoTeardown();
 		_PTH_WORKER_SET(plugin, pth_accept);
 
 
+extern void plugin_preload_init_cpp();
+
 void bitcoindpreload_init(GModule* handle, int nLocks) {	
 	BitcoindPreloadWorker* worker;
 	if (!pluginWorkerKey) {
@@ -801,7 +802,8 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 
 	const char *module_name = g_module_name(handle);
 	/* lookup all our required symbols in this worker's module, asserting success */
-	if (g_str_has_suffix(module_name, "bitcoind.so")) {
+	if (g_str_has_suffix(module_name, "bitcoind.so") ||
+	        g_str_has_suffix(module_name, "bitcoind.092.so")) {
 		_PTH_WORKERS(bitcoind);
 		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
 
@@ -809,14 +811,14 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 		g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
 		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
 
-	} else if (g_str_has_suffix(module_name, "injector.so")) {
-		_PTH_WORKERS(injector);
-	} else if (g_str_has_suffix(module_name, "connector.so")) {
-		_PTH_WORKERS(netmine_connector);
-		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_connector_pthtable.swapPlugin_epoll_wait));
-	} else if (g_str_has_suffix(module_name, "logserver.so")) {
-		_PTH_WORKERS(netmine_logserver);
-		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_logserver_pthtable.swapPlugin_epoll_wait));
+	} else if (g_str_has_suffix(module_name, "bitcoind.093.so")) {
+        _PTH_WORKERS(bitcoind2);
+        g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+
+        /* Crypto global */
+        g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
+        g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
+
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
@@ -1143,6 +1145,7 @@ int epoll_wait(int epfd, struct epoll_event *events,
 		worker->activeContext = EXECTX_PLUGIN;
 		return rc;
 	}
+	return rc;
 }
 int epoll_pwait(int epfd, struct epoll_event *events,
 		int maxevents, int timeout, const sigset_t *ss) 
@@ -2064,7 +2067,7 @@ int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseud
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
 //int SSLv23_method(void) { return 0; }
-typedef struct SSL_METHOD;
+struct SSL_METHOD;
 typedef SSL_CTX *(*SSL_CTX_new_fp)(const struct SSL_METHOD *method);
 SSL_CTX *SSL_CTX_new(const struct SSL_METHOD *method) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
