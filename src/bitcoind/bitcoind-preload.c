@@ -772,6 +772,8 @@ static void _shadowtorpreload_cryptoTeardown();
 		_PTH_WORKER_SET(plugin, pth_accept);
 
 
+extern void plugin_preload_init_cpp();
+
 void bitcoindpreload_init(GModule* handle, int nLocks) {	
 	BitcoindPreloadWorker* worker;
 	if (!pluginWorkerKey) {
@@ -1132,17 +1134,10 @@ int epoll_wait(int epfd, struct epoll_event *events,
 	       int maxevents, int timeout) {
 	_FTABLE_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
 	assert(worker->activeContext == EXECTX_PLUGIN);
-	if ((worker->activePlugin == PLUGIN_NETMINE_LOGSERVER || 
-	     worker->activePlugin == PLUGIN_NETMINE_CONNECTOR) && timeout > 0) {
-		// Swap in to the plugin
-		int rc = _get_active_pthtable(worker)->swapPlugin_epoll_wait(epfd, events, maxevents, timeout);
-		return rc;
-	} else {
-		worker->activeContext = EXECTX_PTH;
-		int rc = worker->ftable.epoll_wait(epfd, events, maxevents, timeout);
-		worker->activeContext = EXECTX_PLUGIN;
-		return rc;
-	}
+	worker->activeContext = EXECTX_PTH;
+	int rc = worker->ftable.epoll_wait(epfd, events, maxevents, timeout);
+	worker->activeContext = EXECTX_PLUGIN;
+	return rc;
 }
 int epoll_pwait(int epfd, struct epoll_event *events,
 		int maxevents, int timeout, const sigset_t *ss) 
@@ -2064,7 +2059,7 @@ int RAND_pseudo_bytes(unsigned char *buf, int num) _SHADOW_GUARD(int, RAND_pseud
 void RAND_cleanup() { assert(0); }
 int RAND_status() { assert(0); }
 //int SSLv23_method(void) { return 0; }
-typedef struct SSL_METHOD;
+struct SSL_METHOD;
 typedef SSL_CTX *(*SSL_CTX_new_fp)(const struct SSL_METHOD *method);
 SSL_CTX *SSL_CTX_new(const struct SSL_METHOD *method) {
 	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
