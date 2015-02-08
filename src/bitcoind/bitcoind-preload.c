@@ -1145,7 +1145,6 @@ int epoll_wait(int epfd, struct epoll_event *events,
 		worker->activeContext = EXECTX_PLUGIN;
 		return rc;
 	}
-	return rc;
 }
 int epoll_pwait(int epfd, struct epoll_event *events,
 		int maxevents, int timeout, const sigset_t *ss) 
