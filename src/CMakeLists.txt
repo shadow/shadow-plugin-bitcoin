@@ -81,6 +81,7 @@ set(boost_sources
     ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
 )
 
+<<<<<<< HEAD
 #===================================================================
 # libev
 #===================================================================
@@ -133,6 +134,8 @@ set(picocoin_SOURCES
 )
 add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
 
+=======
+>>>>>>> 67161bbb331dd32977e39d8a2a20b322e5e4f65c
 
 #===================================================================
 # bitcoin
@@ -366,22 +369,6 @@ target_link_libraries(shadow-plugin-bitcoind
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 
-
-# injector plugin
-add_bitcode(shadow-plugin-bitcoin-injector-bitcode
-    injector/injector-plugin.c
-    injector/injector.c
-)
-add_plugin(shadow-plugin-bitcoin-injector
-    shadow-plugin-bitcoin-injector-bitcode
-    shadow-picocoin-bitcode
-    shadow-pth-bitcode
-)
-target_link_libraries(shadow-plugin-bitcoin-injector
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
-)
-install(TARGETS shadow-plugin-bitcoin-injector DESTINATION plugins)
-
 # bitcoincli plugin
 #add_bitcode(shadow-plugin-bitcoincli-bitcode 
 #    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
@@ -406,6 +393,7 @@ target_link_libraries(shadow-preload-bitcoind
     ${GLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)
+<<<<<<< HEAD
 
 
 add_executable(injector injector/injector-main.c injector/injector.c ${picocoin_SOURCES})
@@ -535,3 +523,5 @@ target_link_libraries(shadow-plugin-netmine-console
     ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
 )
 install(TARGETS shadow-plugin-netmine-console DESTINATION plugins)
+=======
+>>>>>>> 67161bbb331dd32977e39d8a2a20b322e5e4f65c
