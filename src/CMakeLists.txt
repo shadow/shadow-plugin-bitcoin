@@ -89,6 +89,7 @@ include_directories(${libev_ROOT_DIR}/)
 set(libev_SOURCES
 	${libev_ROOT_DIR}/ev.c
 	${libev_ROOT_DIR}/event.c
+	#${libev_ROOT_DIR}/ev_epoll.c
 )
 add_bitcode(shadow-libev-bitcode ${libev_SOURCES})
 
@@ -424,6 +425,7 @@ include_directories(${netmine_ROOT_DIR}/shared/includes
 
 set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
 set(netmine_shared_SOURCES
+	${netmine_shared_ROOT_DIR}/src/connector.cpp
 	${netmine_shared_ROOT_DIR}/src/network.cpp
 	${netmine_shared_ROOT_DIR}/src/config.cpp
 	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
@@ -450,6 +452,17 @@ set(netmine_logserver_SOURCES
 	${netmine_logserver_ROOT_DIR}/src/collector.cpp
 	${netmine_logserver_ROOT_DIR}/src/input_cxn.cpp
 	${netmine_logserver_ROOT_DIR}/src/output_cxn.cpp
+)
+
+set(netmine_getaddr_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/clients)
+set(netmine_getaddr_SOURCES
+	${netmine_getaddr_ROOT_DIR}/getaddr.cpp
+	${netmine_getaddr_ROOT_DIR}/bcwatch.cpp
+)
+
+set(netmine_console_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/logclient)
+set(netmine_console_SOURCES
+	${netmine_console_ROOT_DIR}/src/console.cpp
 )
 add_cxxflags("-std=c++11")
 
@@ -488,3 +501,37 @@ target_link_libraries(shadow-plugin-netmine-logserver
     ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
 )
 install(TARGETS shadow-plugin-netmine-logserver DESTINATION plugins)
+
+# netmine getaddr plugin
+add_bitcode(shadow-netmine-getaddr-bitcode
+    netmine-wrapper/getaddr-plugin.c
+    ${netmine_getaddr_SOURCES}
+)
+add_plugin(shadow-plugin-netmine-getaddr
+    shadow-netmine-getaddr-bitcode
+    shadow-netmine-shared-bitcode
+    shadow-libev-bitcode
+    shadow-pth-bitcode
+    shadow-boost-bitcode
+)
+target_link_libraries(shadow-plugin-netmine-getaddr
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
+)
+install(TARGETS shadow-plugin-netmine-getaddr DESTINATION plugins)
+
+# netmine console plugin
+add_bitcode(shadow-netmine-console-bitcode
+    netmine-wrapper/console-plugin.c
+    ${netmine_console_SOURCES}
+)
+add_plugin(shadow-plugin-netmine-console
+    shadow-netmine-console-bitcode
+    shadow-netmine-shared-bitcode
+    shadow-libev-bitcode
+    shadow-pth-bitcode
+    shadow-boost-bitcode
+)
+target_link_libraries(shadow-plugin-netmine-console
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
+)
+install(TARGETS shadow-plugin-netmine-console DESTINATION plugins)

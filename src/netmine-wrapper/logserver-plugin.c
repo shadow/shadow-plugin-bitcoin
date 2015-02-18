@@ -86,10 +86,10 @@ static void plugin_ready() {
 	bitcoindpreload_setShadowContext();
 
 	// Switch to the plugin running context
-	printf("plugin_ready: About to switch to plugin\n");
+	//printf("plugin_ready: About to switch to plugin\n");
 	int rc = pth_uctx_switch(master_context, plugin_context);
 	bitcoindpreload_setShadowContext();
-	printf("plugin_ready: switched back from plugin\n");
+	//printf("plugin_ready: switched back from plugin\n");
 	assert(rc);
 
 	// When the plugin returns, it should be because we've switched back in
@@ -100,17 +100,17 @@ int swapPlugin_epoll_wait(int epfd, struct epoll_event *events,
 			  int maxevents, int timeout) {
 	bitcoindpreload_setShadowContext();
 
-	//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Registering a callback for %u ms", ms);
+	//shadowlib.log(SHADOW_LOG_LEVEL_WARNING, __FUNCTION__, "[%s] Registering a callback for %d ms", __FILE__, timeout);
 	shadowlib.createCallback((ShadowPluginCallbackFunc) plugin_ready, NULL, timeout);
 
-	printf("epoll_wait: About to switch to master\n");
+	//printf("epoll_wait: About to switch to master\n");
 	int rc = pth_uctx_switch(plugin_context, master_context);
-	printf("epoll_wait: Switched back from master\n");
+	//printf("epoll_wait: Switched back from master\n");
 	assert(rc);
 
 	bitcoindpreload_setShadowContext();
 	rc = epoll_wait(epfd, events, maxevents, 0);
-	printf("rc:%d\n", rc);
+	//printf("rc:%d\n", rc);
 
 	// When we make it here, an event should have occurred
 	bitcoindpreload_setPluginContext(ACTIVE_PLUGIN);

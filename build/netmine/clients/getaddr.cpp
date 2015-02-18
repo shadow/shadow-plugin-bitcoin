@@ -506,7 +506,7 @@ int plugin_main(int argc, char *argv[]) {
 				        it->second->state(cxn_handler::State::CONNECTED);
 			        }
 			        if (g_known_hids.erase(hid) > 0) {
-				        g_log<DEBUG>("Received a hid more than once? ", hid);
+				        g_log<LOG_DEBUG>("Received a hid more than once? ", hid);
 			        }
 			        unique_ptr<hid_handler> handler(new hid_handler(hid, &remote, &bc_msg->local_addr));
 			        g_known_hids.insert(make_pair(hid, move(handler)));
@@ -517,7 +517,7 @@ int plugin_main(int argc, char *argv[]) {
 			        g_known_addrs[remote] = ~0;
 			        auto it = g_cxns.find(remote);
 			        if (it == g_cxns.end()) {
-				        g_log<DEBUG>("Somehow we got a disconnect for a connection we did not know about to ", remote);
+				        g_log<LOG_DEBUG>("Somehow we got a disconnect for a connection we did not know about to ", remote);
 				        unique_ptr<cxn_handler> handler(new cxn_handler(&remote, cxn_handler::State::DISCONNECTED));
 				        g_cxns.insert(make_pair(remote, move(handler)));
 			        } else {

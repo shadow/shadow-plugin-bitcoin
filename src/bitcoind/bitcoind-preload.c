@@ -511,6 +511,9 @@ struct _BitcoindPreloadWorker {
 	PthTable injector_pthtable;
 	PthTable netmine_connector_pthtable;
 	PthTable netmine_logserver_pthtable;
+	PthTable netmine_getaddr_pthtable;
+	PthTable netmine_console_pthtable;
+	PthTable netmine_verbatim_pthtable;
 	unsigned long isRecursive;
 };
 
@@ -520,6 +523,13 @@ static inline PthTable* _get_active_pthtable(BitcoindPreloadWorker *worker) {
 	switch (worker->activePlugin) {
 	case PLUGIN_BITCOIND: return &worker->bitcoind_pthtable;
 	case PLUGIN_BITCOIND2: return &worker->bitcoind2_pthtable;
+	case PLUGIN_INJECTOR: return &worker->injector_pthtable;
+	case PLUGIN_NETMINE_CONNECTOR: return &worker->netmine_connector_pthtable;
+	case PLUGIN_NETMINE_LOGSERVER: return &worker->netmine_logserver_pthtable;
+	case PLUGIN_NETMINE_GETADDR: return &worker->netmine_getaddr_pthtable;
+	case PLUGIN_NETMINE_CONSOLE: return &worker->netmine_console_pthtable;
+	case PLUGIN_NETMINE_VERBATIM: return &worker->netmine_verbatim_pthtable;
+	  assert(0);
 	}
 	assert(0);
 	return 0;
@@ -812,13 +822,30 @@ void bitcoindpreload_init(GModule* handle, int nLocks) {
 		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
 
 	} else if (g_str_has_suffix(module_name, "bitcoind.093.so")) {
-        _PTH_WORKERS(bitcoind2);
-        g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
+		_PTH_WORKERS(bitcoind2);
+		g_assert(g_module_symbol(handle, "CLogPrintStr", (gpointer*)&worker->ftable.CLogPrintStr));
 
-        /* Crypto global */
-        g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
-        g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
-
+		/* Crypto global */
+		g_assert(g_module_symbol(handle, "crypto_global_init", (gpointer*)&worker->ftable.crypto_global_init));
+		g_assert(g_module_symbol(handle, "crypto_global_cleanup", (gpointer*)&worker->ftable.crypto_global_cleanup));
+	}
+	else if (g_str_has_suffix(module_name, "injector.so")) {
+		_PTH_WORKERS(injector);
+	} else if (g_str_has_suffix(module_name, "connector.so")) {
+		_PTH_WORKERS(netmine_connector);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_connector_pthtable.swapPlugin_epoll_wait));
+	} else if (g_str_has_suffix(module_name, "logserver.so")) {
+		_PTH_WORKERS(netmine_logserver);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_logserver_pthtable.swapPlugin_epoll_wait));
+	} else if (g_str_has_suffix(module_name, "getaddr.so")) {
+		_PTH_WORKERS(netmine_getaddr);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_getaddr_pthtable.swapPlugin_epoll_wait));
+	} else if (g_str_has_suffix(module_name, "console.so")) {
+		_PTH_WORKERS(netmine_console);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_console_pthtable.swapPlugin_epoll_wait));
+	} else if (g_str_has_suffix(module_name, "verbatim.so")) {
+		_PTH_WORKERS(netmine_verbatim);
+		g_assert(g_module_symbol(handle, "swapPlugin_epoll_wait", (gpointer*)&worker->netmine_verbatim_pthtable.swapPlugin_epoll_wait));
 	} else assert(0);
 
 	/* lookup system and pthread calls that exist outside of the plug-in module.
@@ -1087,30 +1114,13 @@ unsigned int sleep(unsigned int sec) {
 }
 
 /* time family */
+int clock_settime(clockid_t clk_id, const struct timespec *tp) {
+	assert(0);
+}
 
 
 int gettimeofday(struct timeval *tv, struct timezone *tz) {
-	if(__sync_fetch_and_add(&isRecursive, 1)) {
-		gettimeofday_fp real;
-		SETSYM_OR_FAIL(real, "gettimeofday");
-		int rc = real(tv, tz);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return rc;
-	}
-	BitcoindPreloadWorker* worker = g_private_get(&pluginWorkerKey);
-	if (!worker) {
-		gettimeofday_fp real;
-		SETSYM_OR_FAIL(real, "gettimeofday");
-		int rc = real(tv, tz);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return rc;
-	}
-	if (worker->activeContext != EXECTX_PLUGIN) {
-		int rc = worker->ftable.gettimeofday(tv, tz);
-		__sync_fetch_and_sub(&isRecursive, 1);
-		return rc;
-	}
-	__sync_fetch_and_sub(&isRecursive, 1);
+	_FTABLE_GUARD(int, gettimeofday, tv, tz);
 	worker->activeContext = EXECTX_PTH;
         int rc = worker->ftable.gettimeofday(tv, tz);
 	tv->tv_sec += SHADOW_TIMER_OFFSET; // Offset for a reasonable time!
@@ -1130,12 +1140,17 @@ int epoll_create(int size) _SHADOW_GUARD(int, epoll_create, size);
 int epoll_create1(int flags) _SHADOW_GUARD(int, epoll_create1, flags);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) 
 	_SHADOW_GUARD(int, epoll_ctl, epfd, op, fd, event)
+
 int epoll_wait(int epfd, struct epoll_event *events,
 	       int maxevents, int timeout) {
 	_FTABLE_GUARD(int, epoll_wait, epfd, events, maxevents, timeout);
 	assert(worker->activeContext == EXECTX_PLUGIN);
 	if ((worker->activePlugin == PLUGIN_NETMINE_LOGSERVER || 
-	     worker->activePlugin == PLUGIN_NETMINE_CONNECTOR) && timeout > 0) {
+	     worker->activePlugin == PLUGIN_NETMINE_GETADDR || 
+	     worker->activePlugin == PLUGIN_NETMINE_CONSOLE ||
+	     worker->activePlugin == PLUGIN_NETMINE_VERBATIM ||
+	     worker->activePlugin == PLUGIN_NETMINE_CONNECTOR ||
+	       0) && timeout != 0) {
 		// Swap in to the plugin
 		int rc = _get_active_pthtable(worker)->swapPlugin_epoll_wait(epfd, events, maxevents, timeout);
 		return rc;
@@ -1157,7 +1172,7 @@ int epoll_pwait(int epfd, struct epoll_event *events,
 		_FTABLE_GUARD(rctype, func, __VA_ARGS__);	\
 		assert(worker->activeContext == EXECTX_PLUGIN);	\
 		worker->activeContext = EXECTX_PTH;		\
-		rctype rc = _get_active_pthtable(worker)->pth_##func(__VA_ARGS__);	\
+		rctype rc = _get_active_pthtable(worker)->pth_##func(__VA_ARGS__); \
 		worker->activeContext = EXECTX_PLUGIN;		\
 		return rc;					\
 	}							\

@@ -35,21 +35,26 @@
     <plugin id="bitcoind" path="libshadow-plugin-bitcoind.so" />
     <plugin id="netmine-connector" path="libshadow-plugin-netmine-connector.so" />
     <plugin id="netmine-logserver" path="libshadow-plugin-netmine-logserver.so" />
+    <plugin id="netmine-getaddr" path="libshadow-plugin-netmine-getaddr.so" />
+    <plugin id="netmine-console" path="libshadow-plugin-netmine-console.so" />
 
     <!-- the length of our experiment in seconds  1404101800-->
-    <kill time="120" />
+    <kill time="6000" />
     <!-- our nodes -->
 
     <node id="bcdnode1">
       <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin1 -debug -printtoconsole -connect=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -connect=connector" />
     </node>
+
     <node id="bcdnode2">
         <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin2 -debug -printtoconsole -listen -connect=bcdnode1 -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -connect=connector" />
     </node>
 
     <node id="connector">
-        <application plugin="netmine-connector" time="2" arguments="--configfile=netmine/netmine.cfg" />
         <application plugin="netmine-logserver" time="1" arguments="--configfile=netmine/netmine.cfg" />
+        <application plugin="netmine-console" time="2" arguments="netmine/netmine.cfg" />
+        <application plugin="netmine-connector" time="3" arguments="--configfile=netmine/netmine.cfg" />
+        <application plugin="netmine-getaddr" time="25" arguments="--configfile=netmine/netmine.cfg" />
     </node>
 
 </shadow>

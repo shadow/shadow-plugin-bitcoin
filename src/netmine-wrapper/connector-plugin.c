@@ -99,7 +99,7 @@ int swapPlugin_epoll_wait(int epfd, struct epoll_event *events,
 			  int maxevents, int timeout) {
 	bitcoindpreload_setShadowContext();
 
-	//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "Registering a callback for %u ms", ms);
+	//shadowlib.log(SHADOW_LOG_LEVEL_MESSAGE, __FUNCTION__, "[%s] Registering a callback for %d ms", __FILE__, timeout);
 	shadowlib.createCallback((ShadowPluginCallbackFunc) plugin_ready, NULL, timeout);
 
 	int rc = pth_uctx_switch(plugin_context, master_context);
