@@ -90,10 +90,15 @@ int send_getinfo(const char *serverHostName) {
 
 int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {       
 	slogf = slogf_;
-	assert(argc >= 2);
+	assert(argc >= 3);
 
-	char *serverHostName = argv[1];
-
+	char serverHostName[1024];
+	strcpy(serverHostName, argv[1]);
+	char payload_path[1024];
+	strcpy(payload_path, argv[2]);
+	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
+	      "payload_path:%s", payload_path);
+	
 	//send_getinfo(serverHostName);
 	//return 0;
 
@@ -154,15 +159,20 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		int rc = send(sd, msg->str, msg->len, 0);
 		assert(rc == msg->len);
 	}
+
 	sleep(2);
+
 	{
+		// Send the VERACK message
 		bitcoindpreload_setShadowContext();
 		GString *msg = message_str(chain_metadata[CHAIN_BITCOIN].netmagic, "verack", NULL, 0);
 		bitcoindpreload_setPluginContext(PLUGIN_INJECTOR);
 		int rc = send(sd, msg->str, msg->len, 0);
 		assert(rc == msg->len);
 	}
+
 	{
+		// Send the PING message
 		struct msg_ping mv;
 		msg_ping_init(&mv);
 		bitcoindpreload_setShadowContext();
@@ -172,19 +182,13 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		int rc = send(sd, msg->str, msg->len, 0);
 		assert(rc == msg->len);
 	}
+
 	sleep(2);
-	if (argc > 2) {
-		const char *delay = argv[2];
-		int d=100;
-		//sscanf(delay, "%d", &d);
-		slogf(SHADOW_LOG_LEVEL_CRITICAL,__FUNCTION__,
-		      "delaying for %s, %d seconds", argv[2], d);
-		sleep(d);
-	}
+
 	{
 		// Read the payload file and send it
-		const char *payload_path = "experiments/";
-		//if (argc > 2) payload_path = "/home/amiller/experiment1_payload_5meg_even.dat";
+		assert(argc > 2);
+		slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__, payload_path);
 		FILE *f = fopen(payload_path, "rb");
 		assert(f);
 		const int BUF = 200000;
