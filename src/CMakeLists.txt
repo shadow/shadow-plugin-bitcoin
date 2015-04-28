@@ -81,7 +81,6 @@ set(boost_sources
     ${BOOST_ROOT_DIR}/libs/program_options/src/split.cpp
 )
 
-<<<<<<< HEAD
 #===================================================================
 # libev
 #===================================================================
@@ -134,8 +133,6 @@ set(picocoin_SOURCES
 )
 add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
 
-=======
->>>>>>> 67161bbb331dd32977e39d8a2a20b322e5e4f65c
 
 #===================================================================
 # bitcoin
@@ -369,6 +366,21 @@ target_link_libraries(shadow-plugin-bitcoind
 )
 install(TARGETS shadow-plugin-bitcoind DESTINATION plugins)
 
+# injector plugin
+add_bitcode(shadow-plugin-bitcoin-injector-bitcode
+    injector/injector-plugin.c
+    injector/injector.c
+)
+add_plugin(shadow-plugin-bitcoin-injector
+    shadow-plugin-bitcoin-injector-bitcode
+    shadow-picocoin-bitcode
+    shadow-pth-bitcode
+)
+target_link_libraries(shadow-plugin-bitcoin-injector
+    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
+)
+install(TARGETS shadow-plugin-bitcoin-injector DESTINATION plugins)
+
 # bitcoincli plugin
 #add_bitcode(shadow-plugin-bitcoincli-bitcode 
 #    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
@@ -393,135 +405,7 @@ target_link_libraries(shadow-preload-bitcoind
     ${GLIB_LIBRARIES} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES}
 )
 install(TARGETS shadow-preload-bitcoind DESTINATION lib)
-<<<<<<< HEAD
 
 
 add_executable(injector injector/injector-main.c injector/injector.c ${picocoin_SOURCES})
 target_link_libraries(injector ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${GLIB_LIBRARIES} -lm)
-
-
-
-
-#===================================================================
-# littonizer
-#===================================================================
-set(netmine_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine)
-include_directories(${netmine_ROOT_DIR}/shared/includes 
-	${netmine_ROOT_DIR}/connector/includes 
-	${netmine_ROOT_DIR}/logserver/includes
-)
-
-set(netmine_shared_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/shared)
-set(netmine_shared_SOURCES
-	${netmine_shared_ROOT_DIR}/src/connector.cpp
-	${netmine_shared_ROOT_DIR}/src/network.cpp
-	${netmine_shared_ROOT_DIR}/src/config.cpp
-	${netmine_shared_ROOT_DIR}/src/wrapped_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/alloc_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/mmap_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/read_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/write_buffer.cpp
-	${netmine_shared_ROOT_DIR}/src/bitcoin.cpp
-	${netmine_shared_ROOT_DIR}/src/crypto.cpp
-	${netmine_shared_ROOT_DIR}/src/iobuf.cpp
-	${netmine_shared_ROOT_DIR}/src/logger.cpp
-)
-
-set(netmine_connector_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/connector)
-set(netmine_connector_SOURCES
-	${netmine_connector_ROOT_DIR}/src/bitcoin_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/command_handler.cpp
-	${netmine_connector_ROOT_DIR}/src/connector_main.cpp
-)
-
-set(netmine_logserver_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/logserver)
-set(netmine_logserver_SOURCES
-	${netmine_logserver_ROOT_DIR}/src/logserver_main.cpp
-	${netmine_logserver_ROOT_DIR}/src/collector.cpp
-	${netmine_logserver_ROOT_DIR}/src/input_cxn.cpp
-	${netmine_logserver_ROOT_DIR}/src/output_cxn.cpp
-)
-
-set(netmine_getaddr_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/clients)
-set(netmine_getaddr_SOURCES
-	${netmine_getaddr_ROOT_DIR}/getaddr.cpp
-	${netmine_getaddr_ROOT_DIR}/bcwatch.cpp
-)
-
-set(netmine_console_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/netmine/logclient)
-set(netmine_console_SOURCES
-	${netmine_console_ROOT_DIR}/src/console.cpp
-)
-add_cxxflags("-std=c++11")
-
-add_bitcode(shadow-netmine-shared-bitcode ${netmine_shared_SOURCES})
-
-# netmine connector plugin
-add_bitcode(shadow-netmine-connector-bitcode
-    netmine-wrapper/connector-plugin.c
-    ${netmine_connector_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-connector
-    shadow-netmine-connector-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-connector
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-connector DESTINATION plugins)
-
-# netmine logserver plugin
-add_bitcode(shadow-netmine-logserver-bitcode
-    netmine-wrapper/logserver-plugin.c
-    ${netmine_logserver_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-logserver
-    shadow-netmine-logserver-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-logserver
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-logserver DESTINATION plugins)
-
-# netmine getaddr plugin
-add_bitcode(shadow-netmine-getaddr-bitcode
-    netmine-wrapper/getaddr-plugin.c
-    ${netmine_getaddr_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-getaddr
-    shadow-netmine-getaddr-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-getaddr
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-getaddr DESTINATION plugins)
-
-# netmine console plugin
-add_bitcode(shadow-netmine-console-bitcode
-    netmine-wrapper/console-plugin.c
-    ${netmine_console_SOURCES}
-)
-add_plugin(shadow-plugin-netmine-console
-    shadow-netmine-console-bitcode
-    shadow-netmine-shared-bitcode
-    shadow-libev-bitcode
-    shadow-pth-bitcode
-    shadow-boost-bitcode
-)
-target_link_libraries(shadow-plugin-netmine-console
-    ${CMAKE_THREAD_LIBS_INIT} ${OPENSSL_LIBRARIES} ${RT_LIBRARIES} ${DL_LIBRARIES} ${BOOST_LIBRARIES} -lconfig++
-)
-install(TARGETS shadow-plugin-netmine-console DESTINATION plugins)
-=======
->>>>>>> 67161bbb331dd32977e39d8a2a20b322e5e4f65c

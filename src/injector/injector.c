@@ -166,7 +166,7 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		struct msg_ping mv;
 		msg_ping_init(&mv);
 		bitcoindpreload_setShadowContext();
-		GString *rs = ser_msg_ping(BIP0031_VERSION, &mv);
+		GString *rs = ser_msg_version(&mv);
 		GString *msg = message_str(chain_metadata[CHAIN_BITCOIN].netmagic, "ping", rs->str, rs->len);
 		bitcoindpreload_setPluginContext(PLUGIN_INJECTOR);
 		int rc = send(sd, msg->str, msg->len, 0);
@@ -191,7 +191,7 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		static char buf[BUF];
 		int rc;
 		int total_sent = 0;
-		while ((rc = fread(buf, 1, BUF, f))) {
+		while (rc = fread(buf, 1, BUF, f)) {
 			printf("Sending payload: %d bytes\n", rc);
 			char *ptr = buf;
 			while (rc) {
