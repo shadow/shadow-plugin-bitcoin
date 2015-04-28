@@ -127,7 +127,7 @@ def reset(output, count, template):
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin1", symlinks=True)
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin2", symlinks=True)
     print 'template', template
-    for i in range(1,count+1):
+    for i in range(0,count+1):
         print >> sys.stderr, "copying " + output+"/data/.bitcoin%d" % i
         if template is not None:
             shutil.copytree(template, output+"/data/.bitcoin%d" % i, symlinks=True)

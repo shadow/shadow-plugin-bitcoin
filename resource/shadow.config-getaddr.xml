@@ -42,19 +42,52 @@
     <kill time="6000" />
     <!-- our nodes -->
 
+    <node id="bcdnode0">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin0 -debug -printtoconsole -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode1 -externalip=bcdnode0" />
+    </node>
+
     <node id="bcdnode1">
-      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin1 -debug -printtoconsole -connect=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -connect=connector" />
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin1 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -externalip=bcdnode1" />
     </node>
 
     <node id="bcdnode2">
-        <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin2 -debug -printtoconsole -listen -connect=bcdnode1 -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -connect=connector" />
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin2 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode2" />
     </node>
+
+    <node id="bcdnode3">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin3 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode3" />
+    </node>
+
+    <node id="bcdnode4">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin4 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode4" />
+    </node>
+
+    <node id="bcdnode5">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin5 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode5" />
+    </node>
+
+    <node id="bcdnode6">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin6 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode6" />
+    </node>
+
+    <node id="bcdnode7">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin7 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode7" />
+    </node>
+
+    <node id="bcdnode8">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin8 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode8" />
+    </node>
+
+    <node id="bcdnode9">
+      <application plugin="bitcoind" time="13" arguments="-datadir=data/.bitcoin9 -debug -printtoconsole -addnode=bcdnode2 -listen -par=1 -server=1 -rpcpassword=4J7YUKgRHd8hUWp14e233pwmkPtbnQ2cUS4PMxiy1J6z -checkblocks=1 -disablewallet=1 -addnode=connector -addnode=bcdnode0 -addnode=bcdnode1 -addnode=bcdnode2 -addnode=bcdnode3 -addnode=bcdnode4 -addnode=bcdnode5 -addnode=bcdnode6 -addnode=bcdnode7 -addnode=bcdnode8 -addnode=bcdnode9 -externalip=bcdnode9" />
+    </node>
+
 
     <node id="connector">
         <application plugin="netmine-logserver" time="1" arguments="--configfile=netmine/netmine.cfg" />
         <application plugin="netmine-console" time="2" arguments="netmine/netmine.cfg" />
         <application plugin="netmine-connector" time="3" arguments="--configfile=netmine/netmine.cfg" />
-        <application plugin="netmine-getaddr" time="25" arguments="--configfile=netmine/netmine.cfg" />
+        <application plugin="netmine-getaddr" time="300" arguments="--configfile=netmine/netmine.cfg" />
     </node>
 
 </shadow>
