@@ -9,6 +9,8 @@
 '''
 
 import os, sys, subprocess, shutil, argparse
+from lxml import etree
+from random import choice
 from datetime import datetime
 
 DEFAULTPREFIX=os.path.abspath(os.path.expanduser("~/.shadow/"))
@@ -22,7 +24,7 @@ def main():
     ap.add_argument('-i', '--input-file', action="store", dest="input", help="add PATH as a shadow input XML file", metavar="PATH", default=DEFAULTINPUT)
     ap.add_argument('-o', '--output-dir', action="store", type=str, dest="output", help="PATH to directory from which to run Shadow", metavar='PATH', default=DEFAULTOUTPUT)
     ap.add_argument('-c', '--compress', action="store", dest="compress", help="use N xz threads to compress the logfile inline", metavar="N", default=0)
-    ap.add_argument('-r', '--reset', action="store", dest="reset", type=int, help="reset data directory and exit", default=0)
+    ap.add_argument('-r', '--reset', action="store_true", dest="reset", help="reset data directory before running", default=False)
     ap.add_argument('-T', '--template', action="store", dest="template", type=str, help="template directory to copy", default=None)
 
     ap.add_argument('-y', '--assume-yes', action="store_true", dest="clear", help="don't ask before resetting data directory", default=False)
@@ -48,7 +50,7 @@ def main():
         
     # reset the data directory
     if args.reset:
-        reset(args.output, args.reset, args.template)
+        reset(args.output, args.input, args.template)
         log("Data directory reset in output path")
     
     #if args.reset: return 0
@@ -120,21 +122,33 @@ def query_yes_no(question, default="yes"):
         elif choice in valid: return valid[choice]
         else: sys.stderr.write("Please respond with 'yes' or 'no' (or 'y' or 'n').\n")
 
-def reset(output, count, template):
+def reset(output, input, template):
     if os.path.exists(output+"/data"): shutil.rmtree(output+"/data")
     os.mkdir(output+"/data")
     os.symlink(output+"/initdata/pristine", output+"/data/pristine")
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin1", symlinks=True)
     #shutil.copytree(output+"/initdata/dotbitcoin_template_120k", output+"/data/.bitcoin2", symlinks=True)
     print 'template', template
-    for i in range(1,count+1):
-        print >> sys.stderr, "copying " + output+"/data/.bitcoin%d" % i
+
+    for n in get_node_names(input):
+        d = output+"/data/{0}".format(n)
+        print >> sys.stderr, "copying " + d
         if template is not None:
-            shutil.copytree(template, output+"/data/.bitcoin%d" % i, symlinks=True)
+            shutil.copytree(template, d, symlinks=True)
+            peersdat = "../../"+choice(["gt-10-peers.dat", "gt-11-peers.dat", "gt-12-peers.dat"])
+            peersdatname = "{0}/peers.dat".format(d)
+            #shutil.copy(peersdat, peersdatname)
+            #os.symlink(peersdat, peersdatname)
         else:
-            os.mkdir(output+"/data/.bitcoin%d" % i)
+            os.mkdir(d)
         #shutil.copytree(output+"/initdata/dotbitcoin_template_330k", output+"/data/.bitcoin%d" % i, symlinks=True)
         #shutil.copy(output+"/snapshot.dat", output+"/data/.bitcoin1/snapshot.dat")
+
+def get_node_names(infname):
+    parser = etree.XMLParser(remove_blank_text=True)
+    tree = etree.parse(infname, parser)
+    root = tree.getroot()
+    return [n.get("id") for n in root.iterchildren("node")]
 
 def log(msg):
     color_start_code = "\033[94m" # red: \033[91m"
