@@ -183,8 +183,8 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 	}
 	{
 		// Read the payload file and send it
-		const char *payload_path = "/home/amiller/experiment1_payload.dat";
-		if (argc > 2) payload_path = "/home/amiller/experiment1_payload_5meg_even.dat";
+		const char *payload_path = "experiments/";
+		//if (argc > 2) payload_path = "/home/amiller/experiment1_payload_5meg_even.dat";
 		FILE *f = fopen(payload_path, "rb");
 		assert(f);
 		const int BUF = 200000;
