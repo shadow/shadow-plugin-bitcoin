@@ -6,10 +6,8 @@ machine using the Shadow discrete-event network simulator.
 
 Setup and Usage Instructions:
   + https://github.com/shadow/shadow-plugin-bitcoin/wiki
-  + 
 
-Shadow-Bitcoin: Scalable Simulation via Direct Execution of Multi-threaded Applications
-  + Online tech report [(pdf)](https://cs.umd.edu/~amiller/shadow-bitcoin.pdf)
+[Online tech report] Shadow-Bitcoin: Scalable Simulation via Direct Execution of Multi-threaded Applications [(pdf)](https://cs.umd.edu/~amiller/shadow-bitcoin.pdf)
 
 More Information about Shadow:
   + https://shadow.github.io
