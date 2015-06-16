@@ -135,7 +135,7 @@ add_bitcode(shadow-picocoin-bitcode ${picocoin_SOURCES})
 
 
 #===================================================================
-# bitcoin
+# bitcoin (v0.9.2)
 #===================================================================
 
 #get_filename_component(BITCOIN_ROOT_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
@@ -204,6 +204,109 @@ set(bitcoin_sources
     #${BITCOIN_ROOT_DIR}/src/compat/glibc_sanity.cpp
     #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_compat.cpp
     #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_sanity.cpp
+)
+
+#FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
+
+#===================================================================
+# bitcoin (v0.10.1)
+#===================================================================
+
+#get_filename_component(BITCOIN_ROOT_DIR "${CMAKE_BINARY_DIR}/../bitcoin/src" ABSOLUTE)
+set(BITCOIN_ROOT_DIR ${CMAKE_SOURCE_DIR}/build/bitcoin-0.10.1)
+include_directories(${BITCOIN_ROOT_DIR}/src/secp256k1)
+include_directories(${BITCOIN_ROOT_DIR}/src/secp256k1/include)
+message(STATUS "BITCOIN_ROOT_DIR = ${BITCOIN_ROOT_DIR}")
+
+#aux_source_directory(${BITCOIN_ROOT_DIR}/src bitcoin_sources)
+#list(REMOVE_ITEM bitcoin_sources
+#    ${BITCOIN_ROOT_DIR}/src/db.cpp
+#    ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
+#    ${BITCOIN_ROOT_DIR}/src/bitcoin-cli.cpp
+#    ${BITCOIN_ROOT_DIR}/src/bitcoind.cpp
+#)
+
+set(bitcoin_sources_v0_10_1
+    ${BITCOIN_ROOT_DIR}/src/addrman.cpp
+    ${BITCOIN_ROOT_DIR}/src/alert.cpp  
+    ${BITCOIN_ROOT_DIR}/src/allocators.cpp
+    ${BITCOIN_ROOT_DIR}/src/amount.cpp
+    ${BITCOIN_ROOT_DIR}/src/base58.cpp 
+    ${BITCOIN_ROOT_DIR}/src/bloom.cpp  
+    ${BITCOIN_ROOT_DIR}/src/chainparamsbase.cpp
+    ${BITCOIN_ROOT_DIR}/src/chain.cpp
+    ${BITCOIN_ROOT_DIR}/src/chainparams.cpp
+    ${BITCOIN_ROOT_DIR}/src/checkpoints.cpp
+    ${BITCOIN_ROOT_DIR}/src/coins.cpp  
+    ${BITCOIN_ROOT_DIR}/src/compressor.cpp  
+    ${BITCOIN_ROOT_DIR}/src/core_read.cpp
+    ${BITCOIN_ROOT_DIR}/src/core_write.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypter.cpp
+    ${BITCOIN_ROOT_DIR}/src/eccryptoverify.cpp
+    ${BITCOIN_ROOT_DIR}/src/ecwrapper.cpp
+    #${BITCOIN_ROOT_DIR}/src/db.cpp
+    ${BITCOIN_ROOT_DIR}/src/hash.cpp
+    ${BITCOIN_ROOT_DIR}/src/init.cpp
+    ${BITCOIN_ROOT_DIR}/src/key.cpp
+    ${BITCOIN_ROOT_DIR}/src/keystore.cpp
+    ${BITCOIN_ROOT_DIR}/src/leveldbwrapper.cpp
+    ${BITCOIN_ROOT_DIR}/src/main.cpp   
+    ${BITCOIN_ROOT_DIR}/src/merkleblock.cpp
+    ${BITCOIN_ROOT_DIR}/src/miner.cpp  
+    ${BITCOIN_ROOT_DIR}/src/netbase.cpp
+    ${BITCOIN_ROOT_DIR}/src/net.cpp
+    ${BITCOIN_ROOT_DIR}/src/noui.cpp   
+    ${BITCOIN_ROOT_DIR}/src/pow.cpp
+    ${BITCOIN_ROOT_DIR}/src/protocol.cpp
+    ${BITCOIN_ROOT_DIR}/src/pubkey.cpp
+    ${BITCOIN_ROOT_DIR}/src/random.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcblockchain.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcclient.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcmining.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcmisc.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcnet.cpp 
+    ${BITCOIN_ROOT_DIR}/src/rpcprotocol.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcrawtransaction.cpp
+    ${BITCOIN_ROOT_DIR}/src/rpcserver.cpp
+    #${BITCOIN_ROOT_DIR}/src/rpcwallet.cpp
+    ${BITCOIN_ROOT_DIR}/src/primitives/transaction.cpp
+    ${BITCOIN_ROOT_DIR}/src/primitives/block.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/bitcoinconsensus.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/script_error.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/script.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/interpreter.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/sign.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/sigcache.cpp
+    ${BITCOIN_ROOT_DIR}/src/script/standard.cpp
+    ${BITCOIN_ROOT_DIR}/src/sync.cpp
+    ${BITCOIN_ROOT_DIR}/src/timedata.cpp
+    ${BITCOIN_ROOT_DIR}/src/txdb.cpp
+    ${BITCOIN_ROOT_DIR}/src/txmempool.cpp
+    ${BITCOIN_ROOT_DIR}/src/uint256.cpp
+    ${BITCOIN_ROOT_DIR}/src/util.cpp
+    ${BITCOIN_ROOT_DIR}/src/utilstrencodings.cpp
+    ${BITCOIN_ROOT_DIR}/src/utilmoneystr.cpp   
+    ${BITCOIN_ROOT_DIR}/src/utiltime.cpp
+    ${BITCOIN_ROOT_DIR}/src/clientversion.cpp
+    #${BITCOIN_ROOT_DIR}/src/wallet.cpp
+    #${BITCOIN_ROOT_DIR}/src/walletdb.cpp
+
+    # Crypto
+    ${BITCOIN_ROOT_DIR}/src/crypto/hmac_sha256.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/hmac_sha512.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/rfc6979_hmac_sha256.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/ripemd160.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/sha1.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/sha256.cpp
+    ${BITCOIN_ROOT_DIR}/src/crypto/sha512.cpp
+    ${BITCOIN_ROOT_DIR}/src/secp256k1/src/secp256k1.c
+
+    # Compact
+    #${BITCOIN_ROOT_DIR}/src/compat/glibc_compat.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibc_sanity.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_compat.cpp
+    #${BITCOIN_ROOT_DIR}/src/compat/glibcxx_sanity.cpp
+    ${BITCOIN_ROOT_DIR}/src/compat/strnlen.cpp
 )
 
 #FILE(GLOB bitcoin_headers ${BITCOIN_ROOT_DIR}/src/*.h)
@@ -346,7 +449,8 @@ include_directories(AFTER ${OPENSSL_INCLUDE_DIR} ${RT_INCLUDES} ${DL_INCLUDES} $
 
 add_bitcode(shadow-boost-bitcode ${boost_sources})
 add_bitcode(shadow-leveldb-bitcode ${leveldb_sources})
-add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
+add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources_v0_10_1})
+#add_bitcode(shadow-bitcoin-bitcode ${bitcoin_sources})
 
 # bitcoind plugin
 add_bitcode(shadow-plugin-bitcoind-bitcode 
