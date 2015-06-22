@@ -27,7 +27,8 @@
 
 #include "pth.h"
 
-#define SHADOW_TIMER_OFFSET 1404101800
+//#define SHADOW_TIMER_OFFSET 1404101800
+#define SHADOW_TIMER_OFFSET 1303964120
 
 G_LOCK_DEFINE_STATIC(shadowtorpreloadGlobalLock);
 

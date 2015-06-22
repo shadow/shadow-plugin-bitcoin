@@ -27,7 +27,7 @@
 #include "injector.h"
 
 enum {
-	PROTO_VERSION= 60002,
+	PROTO_VERSION= 70002,
 };
 
 static ShadowLogFunc slogf;
@@ -87,6 +87,8 @@ int send_getinfo(const char *serverHostName) {
 	assert(rc == sizeof(getinfo_string));
 	return 0;
 }
+
+
 
 int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {       
 	slogf = slogf_;
@@ -148,10 +150,11 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 		struct msg_version mv;
 		msg_version_init(&mv);
 		mv.nVersion = PROTO_VERSION;
+		mv.nServices = 1;
 		mv.nTime = (int64_t) time(NULL);
 		mv.nonce = 1324;
 		sprintf(mv.strSubVer, "/picocoin:%s/", VERSION);
-		mv.nStartingHeight = 10;
+		mv.nStartingHeight = 120595;
 		bitcoindpreload_setShadowContext();
 		GString *rs = ser_msg_version(&mv);
 		GString *msg = message_str(chain_metadata[CHAIN_BITCOIN].netmagic, "version", rs->str, rs->len);
@@ -223,8 +226,7 @@ int injector_new(int argc, char* argv[], ShadowLogFunc slogf_) {
 	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
 	      "sending done");
 	
-	while (1)
-		sleep(10);
+	sleep(60);
 	slogf(SHADOW_LOG_LEVEL_CRITICAL, __FUNCTION__,
 	      "sleep done");
 

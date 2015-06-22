@@ -7,6 +7,9 @@ from bitcoin.core.script import *
 from bitcoin.core.scripteval import *
 from bitcoin import base58
 from bitcoin.messages import *
+import ctypes
+
+_ssl = ctypes.cdll.LoadLibrary(ctypes.util.find_library('ssl') or 'libeay32')
 
 # ethalone keys
 #ec_secret = 'a0dc65ffca799873cbea0ac274015b9526505daaaed385155425f7337704883e'
@@ -19,7 +22,7 @@ def patched_set_pubkey(self, key):
         #print 'cheating!'
         key = cheat
     self.mb = ctypes.create_string_buffer(key)
-    ssl.o2i_ECPublicKey(ctypes.byref(self.k), ctypes.byref(ctypes.pointer(self.mb)), len(key))
+    _ssl.o2i_ECPublicKey(ctypes.byref(self.k), ctypes.byref(ctypes.pointer(self.mb)), len(key))
 
 CECKey.set_pubkey = patched_set_pubkey
 
@@ -35,7 +38,7 @@ class Transaction():
     def __init__(self):
         self.vin = [] # staged txin's only. Might be less than in _ctx
         self._vout = []
-        self._ctx = CTransaction()
+        self._ctx = CMutableTransaction()
 
     def append_txout(self, txout):
         assert txout._tx is None and txout._idx is None
@@ -47,7 +50,7 @@ class Transaction():
     def finalize(self):
         assert self._ctx.vin == []
         for idx,txin in enumerate(self.vin):
-            ctxin = CTxIn(txin.txout.prevout)
+            ctxin = CMutableTxIn(txin.txout.prevout)
             self._ctx.vin.append(ctxin)
         for idx,txin in enumerate(self.vin):
             txfrom = txin.txout._tx._ctx
@@ -59,7 +62,7 @@ class TxOut():
         self._tx = None
         self._idx = None
         # a TxOut is "unhooked" until _tx and _idx are set
-        self._ctxout = CTxOut()
+        self._ctxout = CMutableTxOut()
         self._ctxout.nValue = nValue
         self._ctxout.scriptPubKey = scriptPubKey
 
@@ -97,7 +100,7 @@ def tx_from_CTransaction(ctx):
 def tx_coinbase(height):
     # Makes a coinbase transaction with a single input
     tx = Transaction()
-    ctxin = CTxIn()
+    ctxin = CMutableTxIn()
     ctxin.prevout.hash = 0L
     ctxin.prevout.n = 0xffffffff
     # after v2, coinbase scriptsig must begin with height
@@ -170,7 +173,7 @@ def get_txin_second():
        txout: a txout representing the second coinbase
        sign:  signs a transaction spending this input
     """
-    second_coinbase = CTransaction.deserialize(unhexlify("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"))
+    second_coinbase = CMutableTransaction.deserialize(unhexlify("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"))
     scriptPubKey = CScript(unhexlify('410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac'))
     tx = tx_from_CTransaction(second_coinbase)
     def sign(txfrom, ctx, idx):
