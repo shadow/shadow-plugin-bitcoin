@@ -1,0 +1,22 @@
+diff --git a/src/bitcoind.cpp b/src/bitcoind.cpp
+index d3eb607..a0cf126 100644
+--- a/src/bitcoind.cpp
++++ b/src/bitcoind.cpp
+@@ -131,11 +131,12 @@ bool AppInit(int argc, char* argv[])
+             // InitError will have been called with detailed error, which ends up on console
+             return false;
+         }
+-        if (!AppInitSanityChecks())
+-        {
+-            // InitError will have been called with detailed error, which ends up on console
+-            return false;
+-        }
++        // if (!AppInitSanityChecks())
++        // {
++        //     // InitError will have been called with detailed error, which ends up on console
++        //     return false;
++        // }
++        LogPrintf("ilios:After SanityChecks\n");
+         if (gArgs.GetBoolArg("-daemon", false))
+         {
+ #if HAVE_DECL_DAEMON
