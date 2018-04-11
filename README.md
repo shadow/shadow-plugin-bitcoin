@@ -5,15 +5,16 @@ It can be used to run private Bitcoin networks of clients and servers on a singl
 machine using the Shadow discrete-event network simulator.
 
 
-By leveraging recent version of shadow, you can simplify the Shadow plug-in for
-Bitcoin client. The detailed steps are summarized below.
+By leveraging recent version of shadow, you can simplify the implementation of
+Shadow plug-in for Bitcoin client. The detailed steps are summarized below.
 
 
 # Dependencies
 
-Using Ubuntu 14.04.05 LTS. We confirmed the unresolved segmentation fault errors on Ubuntu 16.04 LTS.
+Please use Ubuntu 14.04.05 LTS. We confirmed the unresolved segmentation fault errors on Ubuntu 16.04 LTS.
 
 You will need to install Shadow and its dependencies, using latest Shadow version (v1.12.0).
+See https://github.com/shadow/shadow/wiki/1.1-Shadow.
 
 Please install the glib manually before installing the shadow.
 ```
@@ -28,7 +29,7 @@ make install
 # Setup plug-in and custom build requirements
 
 After installing the shadow simulator, you will need to install Shadow plug-in for Bitcoin.
-There are several custom build requirements which we will build from the `build` directory:
+We will build from the `build` directory:
 
 ```
 git clone https://github.com/shadow/shadow-plugin-bitcoin.git
@@ -36,7 +37,7 @@ cd shadow-plugin-bitcoin
 mkdir build; cd build
 ```
 
-You will also need to clone and customize the bitcoin sources (v0.16.0).
+You will also need to clone and customize the recent bitcoin sources (v0.16.0).
 
 ```
 sudo apt-get install -y autoconf libtool libboost-all-dev libssl-dev libevent-dev
@@ -76,7 +77,8 @@ shadow ../resource/example.xml
 cd ..
 ```
 
-To run the sample experiment for large network (e.g. 1000 bitcoin nodes), run as follows.
+To run a more large scale example (e.g. 1000 bitcoin nodes), run as follows.
+Python script will automatically generate a necessary network config file of shadow at `../resource/example_multiple_generated.xml`.
 
 ```
 mkdir run
