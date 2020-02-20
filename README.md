@@ -1,3 +1,12 @@
+# :bangbang: ARCHIVAL NOTICE - 2020-02-20 :bangbang:
+
+Unfortunately, this project has not been properly maintained for a long time. This has resulted in users experiencing numerous bugs that we don't have the time to fix. Because we are prioritizing development effort elsewhere, we have decided to archive this repository: **no further development updates will be posted here**.
+
+**Use at your own risk**; if it breaks, you get to keep both pieces.
+
+-----
+
+
 # Shadow-plugin-bitcoin
 
 This repository holds a Shadow plug-in that runs the Bitcoin Satoshi reference client.
